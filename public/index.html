@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="EBC Legal AI Assistant — AI-powered legal research from Eastern Book Company, publisher of SCC Online and India's leading law reports.">
+  <title>EBC Legal AI Assistant — Eastern Book Company</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="header">
+    <div class="header-inner">
+      <a href="/" class="brand">
+        <span class="brand-icon">EBC</span>
+        <span class="brand-lockup">
+          <strong class="brand-name">Legal AI Assistant</strong>
+          <span class="brand-tagline">from <strong>Eastern Book Company</strong> — publishers of <strong>SCC Online</strong></span>
+        </span>
+      </a>
+      <div class="header-right">
+        <div class="tier-group">
+          <select id="tierSelect" class="tier-select" onchange="localStorage.setItem('ebc_tier',this.value);location.reload()">
+            <option value="free">Free</option>
+            <option value="basic">Basic</option>
+            <option value="premium">Premium</option>
+            <option value="enterprise">Enterprise</option>
+          </select>
+        </div>
+        <span id="healthStatus" class="health-badge">Connecting</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="app">
+    <aside class="sidebar">
+      <section class="card">
+        <h3>Indexed Corpus</h3>
+        <div class="corpus-metrics">
+          <span class="corpus-stat"><strong id="docMetric">-</strong> <label>Documents</label></span>
+          <span class="corpus-stat"><strong id="chunkMetric">-</strong> <label>Chunks</label></span>
+          <span class="corpus-stat"><strong id="courtMetric">-</strong> <label>Courts</label></span>
+          <span class="corpus-stat"><strong id="actMetric">-</strong> <label>Acts</label></span>
+        </div>
+        <p class="corpus-aspiration">Production target: <strong>26,00,000+</strong> judgments — weekly / daily incremental ingestion</p>
+      </section>
+
+      <section class="card" id="profilePanel" style="display:none">
+        <h3>Your Profile</h3>
+        <div id="profileInfo" class="chip-row"></div>
+        <p class="card-label" style="margin:8px 0 4px">Practice Areas</p>
+        <div id="profileAreas" class="chip-row"></div>
+      </section>
+
+      <section class="card" id="partyPanel" style="display:none">
+        <h3>Party Comparison</h3>
+        <div id="partyComparison" class="party-grid"></div>
+      </section>
+
+      <section class="card">
+        <h3>Related Authorities</h3>
+        <div id="relatedScroller" class="scroll-list"></div>
+      </section>
+
+      <section class="card">
+        <h3><span>Product Recommendations</span> <span class="badge muted">Upsell</span></h3>
+        <div id="productList"></div>
+      </section>
+    </aside>
+
+    <section class="chat-column">
+      <div class="card chat-card">
+        <div class="chat-header">
+          <div>
+            <p class="chat-eyebrow">EBC Legal Research Assistant</p>
+            <h2>How may I help you today?</h2>
+            <p class="chat-subtitle">Ask any legal research question — judgments, statutes, sections, case law. Powered by the Eastern Book Company corpus.</p>
+          </div>
+          <span id="confidenceBadge" class="badge">Ready</span>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+          <div class="msg bot">
+            <div class="msg-bubble welcome-bubble">
+              <h3>Welcome to EBC Legal AI Assistant</h3>
+              <p>I am your research assistant, built on the Eastern Book Company corpus — the same authoritative source behind <strong>SCC Online</strong>, <strong>EBC Reader</strong>, and <strong>EBC Webstore</strong>.</p>
+              <p>Ask me about Supreme Court and High Court judgments, statutes, sections, or legal topics. Every answer is citation-validated and sourced from our indexed legal library.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-loading" id="chatLoading" style="display:none">
+          <div class="spinner"></div>
+          <span>Retrieving evidence from the EBC corpus…</span>
+        </div>
+
+        <div class="suggestions" id="suggestions">
+          <button class="suggestion" data-query="Latest Supreme Court judgments on Section 420 IPC">
+            <strong>Section 420 IPC</strong>
+            <span>Supreme Court judgments on cheating &amp; fraud</span>
+          </button>
+          <button class="suggestion" data-query="GST input tax credit Section 16">
+            <strong>GST ITC Section 16</strong>
+            <span>Input tax credit eligibility &amp; restrictions</span>
+          </button>
+          <button class="suggestion" data-query="Supreme Court material on privacy under Article 21">
+            <strong>Article 21 — Privacy</strong>
+            <span>Right to privacy under Constitution of India</span>
+          </button>
+          <button class="suggestion" data-query="Rohit Sharma vs State of Maharashtra Section 420">
+            <strong>Rohit vs State of Maharashtra</strong>
+            <span>Case comparison — Section 420 IPC</span>
+          </button>
+          <button class="suggestion" data-query="Vodafone India Ltd v. Union of India GST">
+            <strong>Vodafone vs Union of India</strong>
+            <span>GST — input tax credit dispute</span>
+          </button>
+        </div>
+
+        <form id="queryForm" class="chat-form">
+          <textarea id="queryInput" rows="1" placeholder="Type your legal research query…" spellcheck="true"></textarea>
+          <button class="btn primary" type="submit">Search</button>
+        </form>
+
+        <div class="chat-footer">
+          <span>Every answer requires validated citations from indexed sources</span>
+          <span>Demo corpus — not a substitute for professional legal advice</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Verification &amp; Retrieval Trace</h3>
+        <div class="verification-grid">
+          <div><dt>Status</dt><dd id="statusMetric">Idle</dd></div>
+          <div><dt>Confidence</dt><dd id="confidenceMetric">-</dd></div>
+          <div><dt>Citations</dt><dd id="citationMetric">0</dd></div>
+          <div><dt>Top Score</dt><dd id="topScoreBadge">-</dd></div>
+          <div><dt>Intent</dt><dd id="intentBadge" class="badge muted">-</dd></div>
+        </div>
+        <div id="validationList" class="validation-list"></div>
+        <div id="traceList" class="trace-list"></div>
+      </div>
+
+      <div class="card">
+        <h3>Citation Details</h3>
+        <div id="citationsList" class="scroll-list"></div>
+      </div>
+    </section>
+
+    <aside class="sidebar sidebar-right">
+      <section class="card">
+        <h3>Source Viewer</h3>
+        <div id="sourceViewer" class="source-viewer">
+          <div class="empty-state">
+            <span class="empty-icon">📖</span>
+            <p class="muted">Select an authority from the Related Authorities panel to view the full source details including paragraphs, page numbers, and treatment summary.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Research Workspace <span class="badge muted" id="workspaceCount">0 saved</span></h3>
+        <div class="btn-row">
+          <button id="saveAnswerButton" class="btn secondary" disabled>Save answer</button>
+          <button id="exportMemoButton" class="btn secondary" disabled>Export memo</button>
+        </div>
+        <div id="workspaceList" class="scroll-list"></div>
+      </section>
+
+      <section class="card" id="crmPanel" style="display:none">
+        <h3>CRM Intelligence <span class="badge blue">Live</span></h3>
+        <div id="crmContent"></div>
+      </section>
+
+      <details class="card ingest-box">
+        <summary>Add local source to corpus</summary>
+        <form id="ingestForm">
+          <input id="docTitle" placeholder="Title" required>
+          <input id="docCitation" placeholder="Citation (e.g. 2024 SCC 123)">
+          <input id="docCourt" placeholder="Court">
+          <input id="docYear" type="number" placeholder="Year">
+          <input id="docAct" placeholder="Act">
+          <input id="docSection" placeholder="Section">
+          <textarea id="docText" rows="4" placeholder="Paste legal text to index…" required></textarea>
+          <button type="submit" class="btn secondary">Index document</button>
+        </form>
+      </details>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <div class="footer-col">
+        <h4>EBC Legal AI Assistant</h4>
+        <p>An AI-powered legal research tool from Eastern Book Company, India's leading law information provider since 1949.</p>
+      </div>
+      <div class="footer-col">
+        <h4>EBC Products</h4>
+        <ul>
+          <li><a href="https://www.scconline.com" target="_blank" rel="noreferrer">SCC Online</a></li>
+          <li><a href="https://ebcreader.com" target="_blank" rel="noreferrer">EBC Reader</a></li>
+          <li><a href="https://ebcwebstore.com" target="_blank" rel="noreferrer">EBC Webstore</a></li>
+          <li><a href="https://ebclearning.com" target="_blank" rel="noreferrer">EBC Learning</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <ul>
+          <li><a href="https://ebc.co.in/contact" target="_blank" rel="noreferrer">Contact Us</a></li>
+          <li><a href="https://ebc.co.in/catalogue" target="_blank" rel="noreferrer">Legal Catalogue</a></li>
+          <li><a href="https://ebc.co.in/privacy-policy" target="_blank" rel="noreferrer">Privacy Policy</a></li>
+          <li><a href="https://ebc.co.in/terms" target="_blank" rel="noreferrer">Terms of Use</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>&copy; 2026 Eastern Book Company. All rights reserved. SCC Online is a registered trademark of Eastern Book Company.</span>
+    </div>
+  </footer>
+
+  <script src="/app.js" type="module"></script>
+</body>
+</html>
