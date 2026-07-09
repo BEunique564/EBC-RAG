@@ -1,0 +1,9 @@
+[build]
+  builder = "DOCKERFILE"
+  dockerfilePath = "./Dockerfile"
+
+[service]
+  port = 5174
+
+[[plugins]]
+  id = "redis"
