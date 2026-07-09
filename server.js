@@ -7,7 +7,7 @@ import { buildCorpusStore } from "./src/corpusStore.js";
 import { answerLegalQuery } from "./src/ragPipeline.js";
 import { createCache } from "./src/cache.js";
 import { ingestDocument } from "./src/ingest.js";
-import { getEvents, getEventSummary, getQueryAudit, getHallucinationSummary, recordQueryAudit, recordLatency, getLatencySummary, recordFeedback, getFeedbackSummary } from "./src/analytics.js";
+import { getEvents, getEventSummary, getQueryAudit, getHallucinationSummary, recordQueryAudit, recordLatency, getLatencySummary, recordFeedback, getFeedbackSummary, getSloSummary, getSloViolations, getSloDefinitions } from "./src/analytics.js";
 import { recordQuery, recordProductClick, recordSourceView, recordMemoExport, addLead, getLeads, getTopPracticeAreas, getUserProfile, getCrmSummary } from "./src/crm.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -151,6 +151,7 @@ async function handleApi(req, res) {
       corpus_documents: store.getDocuments().length,
       corpus_chunks: store.getChunks().length,
       summary: corpusSummary(),
+      slo: getSloSummary(),
       guardrail: "answers require retrieved and citation-valid evidence"
     });
   }
@@ -289,6 +290,18 @@ async function handleApi(req, res) {
       production_targets: ["PostgreSQL", "OpenSearch BM25", "Qdrant/OpenSearch vector", "Cross-encoder reranker", "Bedrock or private LLM", "S3", "SQS", "ECS/EKS", "CloudWatch"],
       refusal_policy: "No retrieved and citation-valid evidence means no answer."
     });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/slo") {
+    return sendJson(res, 200, {
+      definitions: getSloDefinitions(),
+      summary: getSloSummary(),
+      recent_violations: getSloViolations(20)
+    });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/slo/definitions") {
+    return sendJson(res, 200, { slos: getSloDefinitions() });
   }
 
   sendJson(res, 404, { error: "API route not found." });

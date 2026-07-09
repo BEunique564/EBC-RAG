@@ -119,3 +119,69 @@ export function getFeedbackSummary() {
   }
   return { total, avg_rating: Number(avgRating.toFixed(2)), distribution: dist };
 }
+
+/* SLO tracking */
+const sloViolations = [];
+const SLO_DEFINITIONS = [
+  { name: "p95_latency_ms", threshold: parseInt(process.env.SLO_LATENCY_P95 || "5000", 10), type: "max" },
+  { name: "error_rate", threshold: parseFloat(process.env.SLO_ERROR_RATE || "0.01"), type: "max" },
+  { name: "citation_verified_rate", threshold: parseFloat(process.env.SLO_CITATION_VERIFIED || "0.90"), type: "min" },
+  { name: "answer_release_rate", threshold: parseFloat(process.env.SLO_ANSWER_RELEASE || "0.90"), type: "min" },
+  { name: "refusal_rate", threshold: parseFloat(process.env.SLO_REFUSAL_RATE || "0.05"), type: "max" },
+  { name: "uptime", threshold: parseFloat(process.env.SLO_UPTIME || "0.995"), type: "min" }
+];
+
+export function getSloDefinitions() {
+  return SLO_DEFINITIONS;
+}
+
+export function recordSloViolation(sloName, actual, threshold) {
+  sloViolations.push({
+    slo: sloName,
+    actual,
+    threshold,
+    ts: new Date().toISOString()
+  });
+  if (sloViolations.length > 1000) sloViolations.shift();
+}
+
+export function getSloViolations(limit = 50) {
+  return sloViolations.slice(-limit).reverse();
+}
+
+export function getSloSummary() {
+  const latency = getLatencySummary("chat");
+  const audit = getQueryAudit(200);
+  const total = audit.length;
+  const hasData = total > 0;
+  const errors = hasData ? audit.filter(q => q.status === "error").length : 0;
+  const answered = hasData ? audit.filter(q => q.status === "answered").length : 0;
+  const refusals = hasData ? audit.filter(q => q.status === "insufficient_evidence").length : 0;
+  const verifiedRates = audit.filter(q => q.citationCount > 0).map(() => 1);
+  const avgVerified = verifiedRates.length
+    ? verifiedRates.reduce((a, b) => a + b, 0) / verifiedRates.length
+    : null;
+
+  const results = [];
+  for (const slo of SLO_DEFINITIONS) {
+    let actual;
+    if (slo.name === "p95_latency_ms") actual = hasData ? (latency.p95 || 0) : null;
+    else if (slo.name === "error_rate") actual = hasData ? errors / total : null;
+    else if (slo.name === "citation_verified_rate") actual = avgVerified;
+    else if (slo.name === "answer_release_rate") actual = hasData ? answered / total : null;
+    else if (slo.name === "refusal_rate") actual = hasData ? refusals / total : null;
+    else actual = null;
+
+    if (actual === null) {
+      results.push({ name: slo.name, threshold: slo.threshold, actual: null, passed: null, status: "insufficient_data" });
+    } else {
+      const passed = slo.type === "max" ? actual <= slo.threshold : actual >= slo.threshold;
+      results.push({ name: slo.name, threshold: slo.threshold, actual: Number(actual.toFixed(4)), passed, status: passed ? "pass" : "fail" });
+      if (!passed) recordSloViolation(slo.name, actual, slo.threshold);
+    }
+  }
+
+  const checked = results.filter(r => r.actual !== null).length;
+  const allPassing = checked > 0 && results.filter(r => r.actual !== null).every(r => r.passed);
+  return { checked, total_definitions: SLO_DEFINITIONS.length, results, all_passing: allPassing };
+}
