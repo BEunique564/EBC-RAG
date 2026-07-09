@@ -3,12 +3,12 @@ import { documentMatchesFilters, extractQueryMetadata, metadataBoost } from "./m
 import { embedChunk, embedQuery, embeddingSimilarity } from "./embeddings.js";
 import { rerankResults } from "./reranker.js";
 
-const RRF_K = 60;
-const MIN_BM25 = 0.01;
+const RRF_K = 50;
+const MIN_BM25 = 0.005;
 
 function bm25Score(queryTokens, chunk, index) {
-  const k1 = 1.4;
-  const b = 0.72;
+  const k1 = 1.6;
+  const b = 0.68;
   let score = 0;
 
   for (const token of queryTokens) {

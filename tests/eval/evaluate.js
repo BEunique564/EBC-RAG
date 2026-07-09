@@ -71,6 +71,8 @@ const METRICS = {
   citationFidelity: { total: 0, withMarkers: 0, apiReported: 0, apiAccurate: 0 },
   hallucination: { totalSentences: 0, unsupportedSentences: 0 },
   confidenceBreakdown: { reported: 0, valid: 0 },
+  citationVerification: { total: 0, verified: 0 },
+  groundedness: { reported: 0, avg: 0, totalScore: 0 },
   latency: []
 };
 
@@ -140,6 +142,20 @@ async function evaluate() {
       }
     }
 
+    /* Citation verification tracking */
+    if (result.citation_verification) {
+      for (const v of result.citation_verification) {
+        METRICS.citationVerification.total++;
+        if (v.verified) METRICS.citationVerification.verified++;
+      }
+    }
+
+    /* Groundedness tracking */
+    if (result.confidence_breakdown && result.confidence_breakdown.groundedness != null) {
+      METRICS.groundedness.reported++;
+      METRICS.groundedness.totalScore += result.confidence_breakdown.groundedness;
+    }
+
     const testPassed = statusOk && citesOk && sectionOk;
     if (testPassed) {
       METRICS.passed++;
@@ -182,6 +198,12 @@ async function evaluate() {
   const confBreakdownValid = METRICS.confidenceBreakdown.reported
     ? `${METRICS.confidenceBreakdown.valid}/${METRICS.confidenceBreakdown.reported}`
     : "N/A";
+  const verRate = METRICS.citationVerification.total
+    ? `${METRICS.citationVerification.verified}/${METRICS.citationVerification.total}`
+    : "N/A";
+  const avgGroundedness = METRICS.groundedness.reported
+    ? Math.round(METRICS.groundedness.totalScore / METRICS.groundedness.reported)
+    : "N/A";
 
   console.log(`  Pass Rate:            ${METRICS.passed}/${METRICS.total} (${(METRICS.passed / METRICS.total * 100).toFixed(0)}%)`);
   console.log(`  Adversarial:          ${advRate}`);
@@ -191,6 +213,8 @@ async function evaluate() {
   console.log(`  API Fidelity Accur:   ${citFidApi}`);
   console.log(`  Hallucination Rate:   ${hallRate}%`);
   console.log(`  Confidence Breakdown: ${confBreakdownValid}`);
+  console.log(`  Citation Verified:    ${verRate}`);
+  console.log(`  Avg Groundedness:     ${avgGroundedness}%`);
 
   if (METRICS.failed.length) {
     console.log();

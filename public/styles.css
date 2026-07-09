@@ -931,6 +931,52 @@ p { line-height: 1.5; }
   white-space: nowrap;
 }
 
+/* ===== CITATION VERIFICATION BADGES ===== */
+.ver-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  vertical-align: middle;
+}
+.ver-badge.verified {
+  background: #ecfdf5;
+  color: var(--green);
+  border: 1px solid #a7f3d0;
+}
+.ver-badge.unverified {
+  background: #fef2f2;
+  color: var(--danger);
+  border: 1px solid #fecaca;
+}
+.ver-summary {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  background: #f9fafb;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+/* ===== SOURCE HIGHLIGHTING ===== */
+.source-highlighted {
+  padding: 10px;
+  border: 2px solid var(--red);
+  border-radius: var(--radius);
+  background: var(--red-light);
+  margin: 8px 0;
+}
+.source-viewer-text mark {
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: #fef3c7;
+}
+
 /* ===== WARNING / GUARDRAIL ===== */
 .warning-item {
   padding: 8px 10px;

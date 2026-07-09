@@ -1,11 +1,12 @@
 import { tokenize, splitSentences } from "./tokenize.js";
 
 const CROSS_ENCODER_WEIGHTS = {
-  token_exact: 0.35,
+  token_exact: 0.30,
   phrase_exact: 0.25,
-  position_early: 0.15,
-  coverage: 0.15,
-  metadata: 0.10
+  position_early: 0.10,
+  coverage: 0.10,
+  metadata: 0.15,
+  legal_terms: 0.10
 };
 
 export function crossEncode(query, chunk, document) {
@@ -51,12 +52,23 @@ export function crossEncode(query, chunk, document) {
   }
   metaScore = Math.min(metaScore, 1);
 
+  /* Legal term signal: boost for exact legal references (section/act/article numbers) */
+  const legalPattern = /(section|sec|article|rule|order)\s*\d+/i;
+  let legalScore = 0;
+  if (legalPattern.test(query) && legalPattern.test(chunkText)) legalScore += 0.5;
+  const caseCitationPattern = /\d{4}\s+(?:\d+\s+)?[A-Z]{2,}\s+\d+/;
+  if (caseCitationPattern.test(query) && caseCitationPattern.test(chunkText)) legalScore += 0.3;
+  const actNamePattern = query.match(/(ipc|gst|crpc|constitution|ibc)/i);
+  if (actNamePattern && chunkText.includes(actNamePattern[1].toLowerCase())) legalScore += 0.2;
+  legalScore = Math.min(legalScore, 1);
+
   const score = (
     tokenExactScore * CROSS_ENCODER_WEIGHTS.token_exact +
     phraseScore * CROSS_ENCODER_WEIGHTS.phrase_exact +
     positionScore * CROSS_ENCODER_WEIGHTS.position_early +
     coverageScore * CROSS_ENCODER_WEIGHTS.coverage +
-    metaScore * CROSS_ENCODER_WEIGHTS.metadata
+    metaScore * CROSS_ENCODER_WEIGHTS.metadata +
+    legalScore * CROSS_ENCODER_WEIGHTS.legal_terms
   );
 
   return {
@@ -66,7 +78,8 @@ export function crossEncode(query, chunk, document) {
       phrase_exact: phraseScore,
       position_early: positionScore,
       coverage: coverageScore,
-      metadata: metaScore
+      metadata: metaScore,
+      legal_terms: legalScore
     }
   };
 }

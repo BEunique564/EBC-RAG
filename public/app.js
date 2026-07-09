@@ -125,6 +125,7 @@ function renderTrace(result) {
 function trustMeter(confidence, breakdown) {
   if (confidence == null || confidence === 0) return '';
   const b = breakdown || {};
+  const groundedness = b.groundedness != null ? b.groundedness : null;
   return `<div class="trust-meter">
     <div class="trust-meter-header"><span>Trust Score</span><strong>${confidence}%</strong></div>
     <div class="trust-meter-bar">
@@ -135,6 +136,7 @@ function trustMeter(confidence, breakdown) {
       <div class="conf-row"><span class="conf-label">Completeness</span><div class="conf-track"><div class="conf-fill" style="width:${b.citationCompleteness || 0}%"></div></div><span class="conf-value">${b.citationCompleteness || 0}%</span></div>
       <div class="conf-row"><span class="conf-label">Corroboration</span><div class="conf-track"><div class="conf-fill" style="width:${b.corroboration || 0}%"></div></div><span class="conf-value">${b.corroboration || 0}%</span></div>
       <div class="conf-row"><span class="conf-label">Coverage</span><div class="conf-track"><div class="conf-fill" style="width:${b.sourceCoverage || 0}%"></div></div><span class="conf-value">${b.sourceCoverage || 0}%</span></div>
+      ${groundedness != null ? `<div class="conf-row"><span class="conf-label">Groundedness</span><div class="conf-track"><div class="conf-fill" style="width:${groundedness}%"></div></div><span class="conf-value">${groundedness}%</span></div>` : ''}
     </div>
   </div>`;
 }
@@ -180,28 +182,36 @@ function answerMessageHtml(result) {
   /* Turn raw URLs in answer into clickable links */
   answer = answer.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noreferrer" class="source-link answer-link">$1</a>');
 
-  /* Turn [S1], [S2] etc. into clickable source refs */
+  /* Turn [S1], [S2] etc. into clickable source refs with paragraph data */
   for (const c of citations) {
     const ref = `[${escapeHtml(c.source_id)}]`;
     const did = escapeHtml(c.document_id || '');
-    const link = `<a href="#" class="citation-ref" data-document-id="${did}" data-source-id="${escapeHtml(c.source_id)}">[${escapeHtml(c.source_id)}]</a>`;
+    const para = escapeHtml(c.paragraph || c.pdf_page || '');
+    const link = `<a href="#" class="citation-ref" data-document-id="${did}" data-source-id="${escapeHtml(c.source_id)}" data-paragraph="${para}">[${escapeHtml(c.source_id)}]</a>`;
     answer = answer.replaceAll(ref, link);
   }
 
-  /* Source pill bar – clickable badges that load the source */
+  /* Source pill bar – clickable badges that load the source with paragraph */
   const sourceBar = citations.length
     ? `<div class="source-bar">${citations.map(c =>
-        `<button class="source-pill" data-document-id="${escapeHtml(c.document_id || '')}" data-source-id="${escapeHtml(c.source_id)}" title="${escapeHtml(c.title)}">${escapeHtml(c.source_id)} ${escapeHtml(c.citation || c.title || '').slice(0, 50)}</button>`
+        `<button class="source-pill" data-document-id="${escapeHtml(c.document_id || '')}" data-source-id="${escapeHtml(c.source_id)}" data-paragraph="${escapeHtml(c.paragraph || c.pdf_page || '')}" title="${escapeHtml(c.title)}">${escapeHtml(c.source_id)} ${escapeHtml(c.citation || c.title || '').slice(0, 50)}</button>`
       ).join('')}</div>`
     : '';
 
-  /* Collapsible evidence section with paragraph locators */
+  /* Collapsible evidence section with paragraph locators and verification badge */
   const evidenceHtml = citations.length
     ? `<details class="evidence-details" ${citations.length > 2 ? '' : 'open'}>
         <summary>View ${citations.length} cited source${citations.length > 1 ? 's' : ''}</summary>
         <div class="evidence-list">${citations.map(c => {
           const loc = (c.locator || '') || (c.paragraph ? `para ${c.paragraph}` : c.pdf_page ? `page ${c.pdf_page}` : '');
-          return `<div class="evidence-item"><strong>${escapeHtml(c.source_id)}</strong> ${escapeHtml(c.title)}${loc ? ` <span class="evidence-loc">${escapeHtml(loc)}</span>` : ''}<br><span class="snippet">${escapeHtml(c.snippet?.slice(0, 200))}…</span></div>`;
+          const verified = c.verified !== false;
+          const verBadge = verified
+            ? `<span class="ver-badge verified" title="All required metadata present">Verified</span>`
+            : `<span class="ver-badge unverified" title="Missing citation metadata">Unverified</span>`;
+          const deeplink = c.pdf_deeplink && !c.pdf_deeplink.startsWith('local://')
+            ? ` <a class="source-link" href="${escapeHtml(c.pdf_deeplink)}" target="_blank" rel="noreferrer" title="Open at exact page">🔗 Open</a>`
+            : '';
+          return `<div class="evidence-item"><strong>${escapeHtml(c.source_id)}</strong> ${verBadge} ${escapeHtml(c.title)}${loc ? ` <span class="evidence-loc">${escapeHtml(loc)}</span>` : ''}${deeplink}<br><span class="snippet">${escapeHtml(c.snippet?.slice(0, 200))}…</span></div>`;
         }).join('')}</div>
        </details>`
     : '';
@@ -269,48 +279,65 @@ function renderProducts(products) {
 }
 
 const sourceCache = new Map();
+let sourceLoadController = null;
 
-async function loadSource(documentId) {
+async function loadSource(documentId, highlightPara) {
   if (!documentId) return;
 
   if (sourceCache.has(documentId)) {
     state.activeSource = sourceCache.get(documentId);
-    renderSource(state.activeSource);
+    renderSource(state.activeSource, highlightPara);
     return;
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000);
+  if (sourceLoadController) sourceLoadController.abort();
+  sourceLoadController = new AbortController();
+  const timeoutId = setTimeout(() => sourceLoadController.abort(), 8000);
 
   elements.sourceViewer.innerHTML = `<div class="empty-state"><div class="spinner" style="margin:0 auto 8px"></div><p class="muted">Loading source details…</p></div>`;
   try {
-    const source = await fetchJ(`/api/source?document_id=${encodeURIComponent(documentId)}&user_id=${state.userId}`, { signal: controller.signal });
+    const source = await fetchJ(`/api/source?document_id=${encodeURIComponent(documentId)}`, { signal: sourceLoadController.signal });
     clearTimeout(timeoutId);
     sourceCache.set(documentId, source);
     state.activeSource = source;
     trackClick("source_view", { document_id: documentId });
-    renderSource(source);
+    renderSource(source, highlightPara);
   } catch (err) {
     clearTimeout(timeoutId);
+    if (err.name === "AbortError") return;
     elements.sourceViewer.innerHTML = `<div class="empty-state"><span class="empty-icon">⚠️</span><p class="muted">Could not load source details.</p><p class="snippet">${escapeHtml(err.message || "Unknown error")}</p><button type="button" class="link-button" data-action="retry-source" data-document-id="${escapeHtml(documentId)}">Retry</button></div>`;
   }
 }
 
-function renderSource(source) {
-  const chunks = (source.chunks || []).map(c => `<p><mark>Para ${escapeHtml(c.paragraph || "-")} / Page ${escapeHtml(c.pdf_page || "-")}</mark> ${escapeHtml(c.text)}</p>`).join("");
+function renderSource(source, highlightPara) {
+  const chunks = (source.chunks || []).map(c => {
+    const isHighlighted = highlightPara && (c.paragraph === highlightPara || c.paragraph === String(highlightPara));
+    const pdfLink = c.pdf_page && source.source_pdf_url && !source.source_pdf_url.startsWith("local://")
+      ? ` <a class="source-link" href="${escapeHtml(source.source_pdf_url)}#page=${escapeHtml(c.pdf_page)}" target="_blank" rel="noreferrer" title="Open PDF at page ${escapeHtml(c.pdf_page)}">📄 Page ${escapeHtml(c.pdf_page)}</a>`
+      : '';
+    return `<p class="${isHighlighted ? 'source-highlighted' : ''}"><mark>Para ${escapeHtml(c.paragraph || "-")}</mark> ${escapeHtml(c.text)}${pdfLink}</p>`;
+  }).join("");
   const treatments = (source.treatment_summary || []).map(i => `<li>${escapeHtml(i)}</li>`).join("");
   const tier = source.subscription_tier && source.subscription_tier !== "free" ? tierBadge(source.subscription_tier) : "";
+  const pdfDeepLink = source.source_pdf_url && !source.source_pdf_url.startsWith("local://") ? source.source_pdf_url : null;
+  const readerLink = source.ebc_reader_url && !source.ebc_reader_url.startsWith("local://") ? source.ebc_reader_url : null;
+
   elements.sourceViewer.innerHTML = `<h3>${escapeHtml(source.title)} ${tier}</h3>
     <div class="metadata-line">${metadataChips(source)}</div>
     <p class="snippet"><strong>${escapeHtml(source.authority_status)}</strong></p>
     <ul class="authority-treatment">${treatments}</ul>
     <div class="source-actions">
-      <a class="link-button" href="${safeUrl(source.ebc_reader_url || source.source_url)}" target="_blank" rel="noreferrer">Open EBC Reader</a>
-      ${source.source_pdf_url && !source.source_pdf_url.startsWith('local://') ? `<a class="link-button" href="${escapeHtml(source.source_pdf_url)}" target="_blank" rel="noreferrer">Open PDF</a>` : ''}
-      <a class="link-button" href="${safeUrl(source.webstore_url)}" target="_blank" rel="noreferrer">View on Webstore</a>
+      ${readerLink ? `<a class="link-button" href="${escapeHtml(readerLink)}" target="_blank" rel="noreferrer">Open in EBC Reader</a>` : ''}
+      ${pdfDeepLink ? `<a class="link-button" href="${escapeHtml(pdfDeepLink)}#page=1" target="_blank" rel="noreferrer">Open PDF</a>` : ''}
+      ${source.webstore_url && !source.webstore_url.startsWith("local://") ? `<a class="link-button" href="${escapeHtml(source.webstore_url)}" target="_blank" rel="noreferrer">View on Webstore</a>` : ''}
       <button type="button" class="link-button" data-action="save-active-source">Save to workspace</button>
     </div>
-    <div class="source-viewer-text">${chunks}</div>`;
+    <div class="source-viewer-text">${chunks || '<p class="muted">No chunk text available.</p>'}</div>`;
+
+  if (highlightPara) {
+    const el = elements.sourceViewer.querySelector('.source-highlighted');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
 }
 
 function saveWorkspaceItem(item) {
@@ -396,7 +423,13 @@ function renderIssues(result) {
   const issuesPanel = document.getElementById("issuesPanel");
   const issuesContent = document.getElementById("issuesContent");
   if (!issuesPanel || !issuesContent) return;
-  if (!issues.length && !result.evidence_gaps?.length) {
+
+  const verdict = result.citation_verification || [];
+  const verifiedCount = verdict.filter(v => v.verified).length;
+  const totalCount = verdict.length;
+  const verSummary = totalCount ? `${verifiedCount}/${totalCount} citations verified` : '';
+
+  if (!issues.length && !result.evidence_gaps?.length && !verSummary) {
     issuesPanel.style.display = "none";
     return;
   }
@@ -405,6 +438,7 @@ function renderIssues(result) {
   const gaps = (result.evidence_gaps || []).map(g => `<div class="evidence-gap-item">${escapeHtml(g)}</div>`).join('');
   issuesContent.innerHTML = `
     ${items ? `<div class="chip-row">${items}</div>` : ''}
+    ${verSummary ? `<div class="ver-summary">${escapeHtml(verSummary)}</div>` : ''}
     ${gaps ? `<div class="evidence-gaps" style="margin-top:6px">${gaps}</div>` : ''}
     <div class="quick-actions">
       <button class="link-button" data-action="copy-citations">Copy citations</button>
@@ -445,7 +479,14 @@ function renderResult(result, query) {
   elements.citationsList.innerHTML = result.citations.length
     ? result.citations.map(c => {
         const loc = (c.locator || '') || (c.paragraph ? `para ${c.paragraph}` : c.pdf_page ? `page ${c.pdf_page}` : '');
-        return `<article class="citation-card"><h3>${escapeHtml(c.source_id)} ${escapeHtml(c.title)}</h3><div class="metadata-line">${metadataChips(c)}${loc ? `<span class="meta-chip">${escapeHtml(loc)}</span>` : ''}</div><p class="snippet">${escapeHtml(c.snippet)}</p></article>`;
+        const verified = c.verified !== false;
+        const verBadge = verified
+          ? `<span class="ver-badge verified">Verified</span>`
+          : `<span class="ver-badge unverified">Unverified</span>`;
+        const deeplink = c.pdf_deeplink && !c.pdf_deeplink.startsWith('local://')
+          ? ` <a class="source-link" href="${escapeHtml(c.pdf_deeplink)}" target="_blank" rel="noreferrer">Open at page</a>`
+          : '';
+        return `<article class="citation-card"><h3>${escapeHtml(c.source_id)} ${escapeHtml(c.title)} ${verBadge}</h3><div class="metadata-line">${metadataChips(c)}${loc ? `<span class="meta-chip">${escapeHtml(loc)}</span>` : ''}</div><p class="snippet">${escapeHtml(c.snippet)}</p>${deeplink}</article>`;
       }).join("")
     : `<article class="citation-card"><h3>No citations released</h3><p class="snippet">The answer was blocked because evidence was insufficient. The system refuses to generate unsupported legal statements.</p></article>`;
   renderProducts(result.product_recommendations || []);
@@ -568,10 +609,23 @@ elements.queryInput.addEventListener("keydown", (e) => {
   }
 });
 
-/* Clickable source refs inside chat messages */
+/* Clickable source refs inside chat messages — load source with paragraph highlight */
 elements.chatMessages.addEventListener("click", async (e) => {
   const ref = e.target.closest("[data-document-id]");
-  if (ref) { e.preventDefault(); await loadSource(ref.dataset.documentId); }
+  if (ref) {
+    e.preventDefault();
+    const para = ref.dataset.paragraph || ref.dataset.para || '';
+    await loadSource(ref.dataset.documentId, para);
+  }
+});
+
+/* Source pills inside chat messages */
+elements.chatMessages.addEventListener("click", async (e) => {
+  const pill = e.target.closest(".source-pill");
+  if (pill && pill.dataset.documentId) {
+    e.preventDefault();
+    await loadSource(pill.dataset.documentId, pill.dataset.paragraph || '');
+  }
 });
 
 /* Related authorities */

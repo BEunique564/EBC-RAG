@@ -5,8 +5,32 @@ const REQUIRED_BY_TYPE = {
   notification: ["document_id", "title", "year", "source_url"]
 };
 
-export function buildCitation(document, chunk, rank, score) {
+export function verifyCitationMetadata(citation) {
+  const checks = {};
+  checks.document_id = Boolean(citation.document_id);
+  checks.title = Boolean(citation.title);
+  checks.court = Boolean(citation.court);
+  checks.year = Boolean(citation.year);
+  checks.citation = Boolean(citation.citation);
+  checks.source_url = Boolean(citation.source_url && !citation.source_url.startsWith("local://"));
+  checks.pdf_url = Boolean(citation.source_pdf_url && !citation.source_pdf_url.startsWith("local://"));
+  checks.reader_url = Boolean(citation.ebc_reader_url && !citation.ebc_reader_url.startsWith("local://"));
+  checks.judge_or_bench = Boolean(citation.judge || citation.bench);
+  checks.paragraph = Boolean(citation.paragraph);
+  checks.pdf_page = Boolean(citation.pdf_page);
   return {
+    all_required: checks.document_id && checks.title && checks.court && checks.year && checks.citation,
+    has_pdf_link: checks.pdf_url,
+    has_reader_link: checks.reader_url,
+    has_locator: checks.paragraph || checks.pdf_page,
+    has_judge: checks.judge_or_bench,
+    is_demo: !checks.source_url && !checks.pdf_url && !checks.reader_url,
+    missing: Object.entries(checks).filter(([, v]) => !v).map(([k]) => k)
+  };
+}
+
+export function buildCitation(document, chunk, rank, score) {
+  const citation = {
     source_id: `S${rank}`,
     document_id: document.document_id,
     title: document.title,
@@ -30,6 +54,14 @@ export function buildCitation(document, chunk, rank, score) {
     score: Number(score.toFixed(3)),
     snippet: chunk.text
   };
+  const verification = verifyCitationMetadata(citation);
+  citation.verified = verification.all_required;
+  citation.document_url = verification.has_pdf_link ? document.source_pdf_url :
+    verification.has_reader_link ? document.ebc_reader_url :
+    document.source_url || "";
+  citation.pdf_deeplink = citation.paragraph && citation.document_url ?
+    `${citation.document_url}#page=${citation.pdf_page || 1}` : citation.document_url;
+  return citation;
 }
 
 export function validateCitation(citation) {

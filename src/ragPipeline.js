@@ -105,6 +105,61 @@ function sentenceCitationCheck(text) {
   return unsupported;
 }
 
+function scoreAnswerGroundedness(answer, citations) {
+  const sentences = splitSentences(answer || "");
+  if (!sentences.length || !citations.length) return { score: 0, grounded: 0, total: sentences.length, details: [] };
+
+  const sourceTexts = citations.map(c => ({
+    source_id: c.source_id,
+    text: (c.snippet || "").toLowerCase()
+  }));
+
+  let groundedCount = 0;
+  const details = [];
+
+  for (const sentence of sentences) {
+    const trimmed = sentence.trim();
+    if (!trimmed) continue;
+    if (trimmed.startsWith("Based only") || trimmed.startsWith("Note:")) {
+      groundedCount++;
+      details.push({ sentence: trimmed, grounded: true, reason: "header" });
+      continue;
+    }
+
+    const hasMarker = /\[\w+\]/.test(trimmed);
+    if (!hasMarker) {
+      details.push({ sentence: trimmed, grounded: false, reason: "no_source_marker" });
+      continue;
+    }
+
+    const sentenceLower = trimmed.toLowerCase();
+    const sentenceTokens = new Set(tokenize(trimmed));
+
+    let bestOverlap = 0;
+    let bestSource = "";
+    for (const src of sourceTexts) {
+      const srcTokens = tokenize(src.text);
+      const overlap = srcTokens.filter(t => sentenceTokens.has(t)).length;
+      const ratio = srcTokens.length ? overlap / srcTokens.length : 0;
+      if (ratio > bestOverlap) {
+        bestOverlap = ratio;
+        bestSource = src.source_id;
+      }
+    }
+
+    const grounded = bestOverlap >= 0.15;
+    if (grounded) groundedCount++;
+    details.push({ sentence: trimmed, grounded, reason: grounded ? `overlap_${(bestOverlap * 100).toFixed(0)}` : `low_overlap_${(bestOverlap * 100).toFixed(0)}`, bestSource });
+  }
+
+  return {
+    score: Math.round((groundedCount / Math.max(sentences.length, 1)) * 100),
+    grounded: groundedCount,
+    total: sentences.length,
+    details
+  };
+}
+
 function calculateConfidence(results, citations, validation) {
   if (!results.length || !validation.valid) {
     return { total: 0, breakdown: { topScore: 0, citationCompleteness: 0, corroboration: 0, sourceCoverage: 0 } };
@@ -363,6 +418,16 @@ export async function answerLegalQuery({ query, filters = {}, role = "lawyer", s
   /* Sentence-level citation grounding check */
   const unsupported = sentenceCitationCheck(answer);
   const fidelity = citationFidelity(answer);
+  const groundedness = scoreAnswerGroundedness(answer, citations);
+  const grounded = groundedness.score >= 50; /* at least 50% of sentences grounded in source */
+
+  /* Re-calibrate confidence: blend retrieval confidence with answer groundedness */
+  const calibratedConfidence = Math.round(confidence * (grounded ? 1.0 : 0.6));
+  const groundedConfidence = Math.round((calibratedConfidence * 0.7) + (groundedness.score * 0.3));
+  const finalConfidence = grounded ? groundedConfidence : Math.min(calibratedConfidence, 40);
+  const metadataComplete = citations.every(c => c.verified);
+  const finalAdjusted = metadataComplete ? Math.min(finalConfidence + 5, 100) : Math.max(finalConfidence - 10, 0);
+
   const allSentencesHaveCitations = unsupported.length === 0;
 
   if (!allSentencesHaveCitations) {
@@ -371,7 +436,7 @@ export async function answerLegalQuery({ query, filters = {}, role = "lawyer", s
     }
   }
 
-  const confidenceLabel = confidence >= 90 ? "high" : confidence >= 70 ? "moderate" : "low";
+  const confidenceLabel = finalAdjusted >= 90 ? "high" : finalAdjusted >= 70 ? "moderate" : "low";
 
   const passageCites = citations.map(c => {
     const loc = paragraphCitation(c);
@@ -384,15 +449,25 @@ export async function answerLegalQuery({ query, filters = {}, role = "lawyer", s
     signals: r.reranker?.signals
   })).filter(r => r.source_id);
 
+  const citationVerification = citations.map(c => ({
+    source_id: c.source_id,
+    verified: c.verified,
+    document_url: c.document_url,
+    pdf_deeplink: c.pdf_deeplink,
+    missing: c.verified ? [] : (c.missing || []),
+    is_demo: !c.source_url || c.source_url.startsWith("local://")
+  }));
+
   const result = {
-    status: "answered",
-    answer,
+    status: grounded ? "answered" : "insufficient_evidence",
+    answer: grounded ? answer : "The generated answer could not be sufficiently grounded in the retrieved sources. I cannot safely provide an answer.",
     answer_type: answerType,
     parties: queryMetadata.parties,
-    failure_reason_human: null,
-    confidence,
+    failure_reason_human: grounded ? null : `Only ${groundedness.score}% of answer sentences could be verified against the cited sources. The system blocks answers below 50% groundedness.`,
+    confidence: finalAdjusted,
     confidence_label: confidenceLabel,
-    confidence_breakdown: confidenceBreakdown,
+    confidence_breakdown: { ...confidenceBreakdown, groundedness: groundedness.score },
+    citation_verification: citationVerification,
     citation_fidelity: { total: fidelity.total, withMarkers: fidelity.withMarkers, fidelity: Math.round(fidelity.fidelity) },
     issues: extractIssues(cleanedQuery),
     evidence_gaps: unsupported.length ? [`${unsupported.length} sentence(s) lack direct source markers`] : [],
