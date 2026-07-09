@@ -7,7 +7,7 @@ import { buildCorpusStore } from "./src/corpusStore.js";
 import { answerLegalQuery } from "./src/ragPipeline.js";
 import { createCache } from "./src/cache.js";
 import { ingestDocument } from "./src/ingest.js";
-import { getEvents, getEventSummary } from "./src/analytics.js";
+import { getEvents, getEventSummary, getQueryAudit, getHallucinationSummary, recordQueryAudit } from "./src/analytics.js";
 import { recordQuery, recordProductClick, recordSourceView, recordMemoExport, addLead, getLeads, getTopPracticeAreas, getUserProfile, getCrmSummary } from "./src/crm.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -161,6 +161,16 @@ async function handleApi(req, res) {
       userId: user.userId
     });
     recordQuery(user.userId, body.query || "", result.query_intent, result.related_documents?.length || 0, result.status === "answered");
+    recordQueryAudit({
+      query: body.query,
+      intent: result.query_intent,
+      confidence: result.confidence || 0,
+      status: result.status,
+      citationCount: result.citations?.length || 0,
+      unsupportedSentences: result.unsupported_sentences || [],
+      answerType: result.answer_type || "none",
+      answeredAt: Date.now()
+    });
     if (result.status !== "answered") addLead({ query: body.query, userId: user.userId, intent: result.query_intent, reason: result.reason || "no_answer" });
     setSessionCookie(res, user.userId);
     return sendJson(res, 200, result);
@@ -214,6 +224,14 @@ async function handleApi(req, res) {
     const document = ingestDocument(body);
     await store.addDocument(document);
     return sendJson(res, 201, { ok: true, document_id: document.document_id, chunks_indexed: document.chunks.length });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/audit") {
+    const limit = Math.min(Number(url.searchParams.get("limit") || 100), 500);
+    return sendJson(res, 200, {
+      summary: getHallucinationSummary(),
+      recent: getQueryAudit(limit)
+    });
   }
 
   if (req.method === "GET" && url.pathname === "/api/architecture") {

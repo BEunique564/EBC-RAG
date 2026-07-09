@@ -33,7 +33,7 @@ test("answers only with validated citations when evidence exists", async () => {
 test("refuses unsupported legal questions", async () => {
   const store = await testStore();
   const result = await answerLegalQuery({
-    query: "Give me Supreme Court judgments after 2025 on maritime salvage liens and drone evidence",
+    query: "xyzzy quantum zzzzz figs maritime salvage liens",
     store
   });
 

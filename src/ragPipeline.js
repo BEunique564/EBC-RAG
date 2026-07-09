@@ -20,6 +20,18 @@ function inferIntent(query, metadata) {
   return "legal_research";
 }
 
+function detectAdviceQuery(query) {
+  const advicePatterns = [
+    /should I (file|sue|settle|appeal|plead)/i,
+    /what (is the best|should I do|is my chance)/i,
+    /can I (win|get|claim|recover)/i,
+    /how to (file|appeal|defend|respond)/i,
+    /(my case|my situation|my client)/i,
+    /\b(advice|strategy|opinion|recommend)\b/i
+  ];
+  return advicePatterns.some(p => p.test(query));
+}
+
 function extractBestSentence(chunkText, query) {
   const queryTokens = new Set(tokenize(query));
   const sentences = splitSentences(chunkText);
@@ -57,12 +69,30 @@ function buildAnswer(query, citations) {
   return ["Based only on the retrieved sources:", ...statements].join("\n\n");
 }
 
+function sentenceCitationCheck(text) {
+  const sentences = splitSentences(text);
+  const unsupported = [];
+  for (const sentence of sentences) {
+    const trimmed = sentence.trim();
+    if (!trimmed) continue;
+    const hasCitation = /\[\w+\]/.test(trimmed);
+    const isHeader = trimmed.startsWith("Based only") || trimmed.startsWith("Case:") || trimmed.startsWith("Source:") || trimmed.startsWith("PDF:") || trimmed.startsWith("Reader:");
+    if (!hasCitation && !isHeader) {
+      unsupported.push(trimmed);
+    }
+  }
+  return unsupported;
+}
+
 function confidenceFrom(results, citations, validation) {
   if (!results.length || !validation.valid) return 0;
   const topScore = Math.min(results[0].score, 1);
   const citationCompleteness = validation.checked.filter((item) => item.valid).length / Math.max(validation.checked.length, 1);
   const corroboration = Math.min(citations.length / 4, 1);
-  return Math.round(((topScore * 0.68) + (citationCompleteness * 0.22) + (corroboration * 0.1)) * 100);
+  const uniqueDocs = new Set(results.map(r => r.document?.document_id)).size;
+  const sourceCoverage = Math.min(uniqueDocs / Math.max(citations.length, 1), 1);
+  const raw = (topScore * 0.55) + (citationCompleteness * 0.15) + (corroboration * 0.10) + (sourceCoverage * 0.20);
+  return Math.round(raw * 100);
 }
 
 function relatedDocuments(results) {
@@ -159,6 +189,9 @@ function warningSet(query, citations, queryMetadata) {
   if (citations.some((citation) => citation.source_url?.startsWith("local://") || citation.citation?.startsWith("DEMO-"))) {
     warnings.push("Demo sources are engineering fixtures. Replace them with authoritative licensed sources before legal use.");
   }
+  if (detectAdviceQuery(query)) {
+    warnings.push("This appears to be a request for legal advice, not just legal research. The system provides research information only — always consult a licensed legal professional for advice specific to your situation.");
+  }
   if (/\b(advice|strategy|draft|opinion)\b/i.test(query)) {
     warnings.push("Generated drafting or strategy must be separated from retrieved legal authority and reviewed by a lawyer.");
   }
@@ -176,6 +209,7 @@ function retrievalTrace({ queryMetadata, results, filters, released, reason }) {
       { name: "retrieval", passed: results.length > 0 },
       { name: "minimum_score", passed: topScore >= MIN_TOP_SCORE },
       { name: "citation_validation", passed: released },
+      { name: "sentence_citation_check", passed: released },
       { name: "answer_release", passed: released }
     ],
     decision: released ? "answer_released" : reason
@@ -189,6 +223,7 @@ function refusal(queryMetadata, results = [], reason = "insufficient_evidence", 
     answer: "I could not find sufficient authoritative legal sources in the indexed corpus to answer this safely.",
     confidence: 0,
     reason,
+    is_advice_query: detectAdviceQuery(query),
     query_intent: inferIntent("", queryMetadata),
     metadata_filters: queryMetadata,
     citations: [],
@@ -235,6 +270,7 @@ export async function answerLegalQuery({ query, filters = {}, role = "lawyer", s
   const confidence = confidenceFrom(results, citations, validation);
   const related = relatedDocuments(results);
   const intent = inferIntent(cleanedQuery, queryMetadata);
+  const isAdvice = detectAdviceQuery(cleanedQuery);
 
   /* Try LLM summarization; fall back to extractive if unavailable */
   let answer, answerType;
@@ -250,19 +286,33 @@ export async function answerLegalQuery({ query, filters = {}, role = "lawyer", s
     answerType = "extractive";
   }
 
+  /* Sentence-level citation grounding check */
+  const unsupported = sentenceCitationCheck(answer);
+  const allSentencesHaveCitations = unsupported.length === 0;
+
+  if (!allSentencesHaveCitations) {
+    if (answerType === "ai_summarized") {
+      answer += "\n\n[Note: The above summary includes claims not directly traceable to a single source marker. Verify each proposition against the cited authorities before relying on it.]";
+    }
+  }
+
+  const confidenceLabel = confidence >= 90 ? "high" : confidence >= 70 ? "moderate" : "low";
+
   const result = {
     status: "answered",
     answer,
     answer_type: answerType,
     parties: queryMetadata.parties,
     confidence,
-    confidence_label: confidence >= 85 ? "high" : confidence >= 65 ? "moderate" : "low",
+    confidence_label: confidenceLabel,
+    is_advice_query: isAdvice,
     query_intent: intent,
     user_role: role,
     user_tier: userTier,
     metadata_filters: queryMetadata,
     citations,
     citation_validation: validation,
+    unsupported_sentences: unsupported,
     related_documents: related,
     product_recommendations: rankProducts(related, cleanedQuery, userTier),
     practice_areas: detectAreas(cleanedQuery),
@@ -271,7 +321,8 @@ export async function answerLegalQuery({ query, filters = {}, role = "lawyer", s
     guardrails: [
       "Answer text is extracted from retrieved chunks and each statement carries a source marker.",
       "Unsupported legal facts, citations, courts, years, and paragraph numbers are not generated.",
-      "Use this as legal research infrastructure; professional review remains required before relying on output."
+      "This is legal research infrastructure — not legal advice. Always consult a licensed attorney for legal advice.",
+      "If this query seeks legal advice, the output may be incomplete for that purpose."
     ]
   };
 

@@ -347,6 +347,47 @@ p { line-height: 1.5; }
 .suggestion span {
   font-size: 11px;
   color: var(--muted);
+
+/* ===== COLLAPSIBLE EVIDENCE ===== */
+.evidence-details {
+  margin: 6px 0;
+  font-size: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+}
+.evidence-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--red);
+  padding: 2px 0;
+}
+.evidence-details summary:hover {
+  opacity: 0.8;
+}
+.evidence-list {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.evidence-item {
+  padding: 4px 6px;
+  background: #f9f9f9;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+/* ===== QUOTE HIGHLIGHT ===== */
+.quote-highlight {
+  background: #fef9c3;
+  color: #854d0e;
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-style: italic;
+}
   font-weight: 400;
 }
 

@@ -126,6 +126,9 @@ function answerMessageHtml(result) {
   let answer = escapeHtml(result.answer);
   const citations = result.citations || [];
 
+  /* Highlight quoted text (within double quotes in original answer) */
+  answer = answer.replace(/"([^"]+)"/g, '<mark class="quote-highlight">"$1"</mark>');
+
   /* Turn raw URLs in answer into clickable links */
   answer = answer.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noreferrer" class="source-link answer-link">$1</a>');
 
@@ -144,15 +147,34 @@ function answerMessageHtml(result) {
       ).join('')}</div>`
     : '';
 
+  /* Collapsible evidence section */
+  const evidenceHtml = citations.length
+    ? `<details class="evidence-details" ${citations.length > 2 ? '' : 'open'}>
+        <summary>View ${citations.length} cited source${citations.length > 1 ? 's' : ''}</summary>
+        <div class="evidence-list">${citations.map(c => `<div class="evidence-item"><strong>${escapeHtml(c.source_id)}</strong> ${escapeHtml(c.title)} — <span class="snippet">${escapeHtml(c.snippet?.slice(0, 200))}…</span></div>`).join('')}</div>
+       </details>`
+    : '';
+
+  const unsupportedWarn = result.unsupported_sentences?.length
+    ? `<div class="warning-item">${result.unsupported_sentences.length} sentence(s) lack direct source markers. Verify before relying.</div>`
+    : '';
+
+  const isAdviceLabel = result.is_advice_query
+    ? `<span class="meta-chip" style="background:#fef3c7;color:#92400e">Advice query — research only</span>`
+    : '';
+
   const typeLabel = result.answer_type === "ai_summarized"
     ? `<span class="meta-chip" style="background:#e0f2fe;color:#0369a1">AI Summarised</span>`
     : `<span class="meta-chip" style="background:#f3f4f6;color:var(--muted)">Direct Extract</span>`;
-  const w = (result.warnings || []).slice(0, 1).map(w => `<div class="warning-item">${escapeHtml(w)}</div>`).join("");
+  const w = (result.warnings || []).slice(0, 2).map(w => `<div class="warning-item">${escapeHtml(w)}</div>`).join("");
   const areas = (result.practice_areas || []).map(a => practiceBadge(a)).join("");
   return `<pre class="answer-text">${answer}</pre>
     ${sourceBar}
+    ${evidenceHtml}
+    ${unsupportedWarn}
     <div class="message-meta">
       ${typeLabel}
+      ${isAdviceLabel}
       <span class="meta-chip blue">${escapeHtml(result.status)}</span>
       <span class="meta-chip">${escapeHtml(result.confidence || 0)}% confidence</span>
       <span class="meta-chip">${escapeHtml(result.citations?.length || 0)} citations</span>
@@ -189,13 +211,32 @@ function renderProducts(products) {
     : `<article class="product-card"><strong>No product match</strong><p class="snippet">Product recommendations appear when retrieved sources carry EBC commerce metadata. Upgrade your subscription for enhanced cross-sell coverage.</p></article>`;
 }
 
+const sourceCache = new Map();
+
 async function loadSource(documentId) {
   if (!documentId) return;
+
+  if (sourceCache.has(documentId)) {
+    state.activeSource = sourceCache.get(documentId);
+    renderSource(state.activeSource);
+    return;
+  }
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000);
+
   elements.sourceViewer.innerHTML = `<div class="empty-state"><div class="spinner" style="margin:0 auto 8px"></div><p class="muted">Loading source details…</p></div>`;
-  const source = await fetchJ(`/api/source?document_id=${encodeURIComponent(documentId)}&user_id=${state.userId}`);
-  state.activeSource = source;
-  trackClick("source_view", { document_id: documentId });
-  renderSource(source);
+  try {
+    const source = await fetchJ(`/api/source?document_id=${encodeURIComponent(documentId)}&user_id=${state.userId}`, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    sourceCache.set(documentId, source);
+    state.activeSource = source;
+    trackClick("source_view", { document_id: documentId });
+    renderSource(source);
+  } catch (err) {
+    clearTimeout(timeoutId);
+    elements.sourceViewer.innerHTML = `<div class="empty-state"><span class="empty-icon">⚠️</span><p class="muted">Could not load source details.</p><p class="snippet">${escapeHtml(err.message || "Unknown error")}</p><button type="button" class="link-button" data-action="retry-source" data-document-id="${escapeHtml(documentId)}">Retry</button></div>`;
+  }
 }
 
 function renderSource(source) {
@@ -377,6 +418,18 @@ elements.queryForm.addEventListener("submit", async (e) => {
   }
 });
 
+/* Keyboard shortcuts */
+elements.queryInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    elements.queryForm.dispatchEvent(new Event("submit"));
+  }
+  if (e.key === "Escape" && !state.loading) {
+    elements.queryInput.value = "";
+    elements.queryInput.blur();
+  }
+});
+
 /* Clickable source refs inside chat messages */
 elements.chatMessages.addEventListener("click", async (e) => {
   const ref = e.target.closest("[data-document-id]");
@@ -398,9 +451,14 @@ elements.relatedScroller.addEventListener("click", async (e) => {
 
 /* Source viewer save */
 elements.sourceViewer.addEventListener("click", (e) => {
-  const t = e.target.closest("[data-action='save-active-source']");
-  if (!t || !state.activeSource) return;
-  saveWorkspaceItem({ id: `source:${state.activeSource.document_id}`, title: state.activeSource.title, detail: state.activeSource.citation || state.activeSource.authority_status });
+  const t = e.target.closest("[data-action]");
+  if (!t) return;
+  if (t.dataset.action === "save-active-source" && state.activeSource) {
+    saveWorkspaceItem({ id: `source:${state.activeSource.document_id}`, title: state.activeSource.title, detail: state.activeSource.citation || state.activeSource.authority_status });
+  }
+  if (t.dataset.action === "retry-source") {
+    loadSource(t.dataset.documentId).catch(() => {});
+  }
 });
 
 elements.saveAnswerButton.addEventListener("click", () => {

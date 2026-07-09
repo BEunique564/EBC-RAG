@@ -38,11 +38,8 @@ function phraseScore(query, chunk, document) {
   }
 
   const importantPhrases = [
-    "input tax credit",
-    "section 16",
-    "supreme court",
-    "personal data",
-    "interim resolution professional"
+    "input tax credit", "section 16", "supreme court",
+    "personal data", "interim resolution professional"
   ];
 
   for (const phrase of importantPhrases) {
@@ -52,11 +49,75 @@ function phraseScore(query, chunk, document) {
   return Math.min(score, 0.4);
 }
 
+function keywordExactScore(query, chunk, document) {
+  const q = query.toLowerCase();
+  const haystack = `${document.title} ${document.citation} ${chunk.text}`.toLowerCase();
+  let score = 0;
+
+  const sectionMatch = q.match(/section\s*(\d+[a-zA-Z]?)/i);
+  if (sectionMatch) {
+    const sec = sectionMatch[1].toLowerCase();
+    const docSec = (chunk.section || document.section || "").toLowerCase();
+    if (docSec.includes(sec)) score += 0.3;
+  }
+
+  const actMatch = q.match(/(ipc|gst|crpc|constitution|ibc|income.?tax|customs)/i);
+  if (actMatch) {
+    const act = actMatch[1].toLowerCase();
+    const docAct = (chunk.act || document.act || "").toLowerCase();
+    if (docAct.includes(act)) score += 0.25;
+  }
+
+  const courtMatch = q.match(/(supreme\s*court|high\s*court|tribunal)/i);
+  if (courtMatch) {
+    const court = courtMatch[1].toLowerCase();
+    const docCourt = (document.court || "").toLowerCase();
+    if (docCourt.includes(court)) score += 0.2;
+  }
+
+  return Math.min(score, 0.5);
+}
+
+function rerank(candidates, query) {
+  const q = query.toLowerCase();
+  const qTokens = new Set(tokenize(q));
+
+  return candidates.map(c => {
+    const text = `${c.document.title} ${c.chunk.text}`.toLowerCase();
+    const textTokens = tokenize(text);
+
+    const exactOverlap = [...qTokens].filter(t => textTokens.includes(t)).length;
+    const recall = qTokens.size ? exactOverlap / qTokens.size : 0;
+
+    const doc = c.document;
+    const metadataHits = [
+      doc.citation && q.includes(doc.citation.toLowerCase()),
+      doc.court && q.includes(doc.court.toLowerCase()),
+      doc.judge && q.includes(doc.judge.toLowerCase()),
+      doc.act && q.includes(doc.act.toLowerCase()),
+      doc.section && q.includes(`section ${doc.section}`.toLowerCase())
+    ].filter(Boolean).length * 0.06;
+
+    const rerankBonus = (recall * 0.15) + metadataHits;
+
+    return { ...c, rerank_bonus: rerankBonus };
+  });
+}
+
+function expandQuery(query, results) {
+  if (results.length > 0) return query;
+  const tokens = tokenize(query);
+  const stopWords = new Set(["kya", "hai", "the", "a", "an", "is", "are", "was", "were", "ka", "ki", "ke", "mein", "me", "se", "par", "per", "by", "for", "of", "in", "to", "on", "at", "with", "from"]);
+  const filtered = tokens.filter(t => !stopWords.has(t) && t.length > 1);
+  return filtered.join(" ") || query;
+}
+
 export function searchCorpus({ query, filters = {}, store, limit = 15 }) {
-  const rawTokens = tokenize(query);
+  let cleanedQuery = String(query || "").trim();
+  const rawTokens = tokenize(cleanedQuery);
   const queryTokens = expandTokens(rawTokens);
   const queryCounts = tokenCounts(queryTokens);
-  const queryMetadata = extractQueryMetadata(query);
+  const queryMetadata = extractQueryMetadata(cleanedQuery);
   const index = store.getIndex();
 
   const candidates = [];
@@ -68,37 +129,37 @@ export function searchCorpus({ query, filters = {}, store, limit = 15 }) {
     const bm25 = bm25Score(queryTokens, chunk, index);
     const dense = cosineSimilarity(queryCounts, chunk.counts);
     const meta = metadataBoost(document, chunk, queryMetadata);
-    const phrase = phraseScore(query, chunk, document);
+    const phrase = phraseScore(cleanedQuery, chunk, document);
+    const keyword = keywordExactScore(cleanedQuery, chunk, document);
 
-    if (bm25 === 0 && dense === 0 && meta === 0 && phrase === 0) continue;
+    if (bm25 === 0 && dense === 0 && meta === 0 && phrase === 0 && keyword === 0) continue;
 
     candidates.push({
-      chunk,
-      document,
-      bm25,
-      dense,
-      meta,
-      phrase,
-      queryMetadata
+      chunk, document, bm25, dense, meta, phrase, keyword, queryMetadata
     });
   }
 
   if (!candidates.length) {
-    return {
-      queryMetadata,
-      results: []
-    };
+    const expanded = expandQuery(cleanedQuery, []);
+    if (expanded !== cleanedQuery) {
+      return searchCorpus({ query: expanded, filters, store, limit });
+    }
+    return { queryMetadata, results: [] };
   }
 
   normalizeScores(candidates, "bm25");
   normalizeScores(candidates, "dense");
 
-  const ranked = candidates
+  const withRerank = rerank(candidates, cleanedQuery);
+
+  const ranked = withRerank
     .map((candidate) => {
-      const rawScore = (candidate.bm25_normalized * 0.48) +
-        (candidate.dense_normalized * 0.26) +
+      const rawScore = (candidate.bm25_normalized * 0.35) +
+        (candidate.dense_normalized * 0.20) +
         candidate.meta +
-        candidate.phrase;
+        candidate.phrase +
+        (candidate.keyword * 0.20) +
+        candidate.rerank_bonus;
 
       return {
         ...candidate,
@@ -118,8 +179,12 @@ export function searchCorpus({ query, filters = {}, store, limit = 15 }) {
     if (deduped.length >= limit) break;
   }
 
-  return {
-    queryMetadata,
-    results: deduped
-  };
+  if (!deduped.length) {
+    const expanded = expandQuery(cleanedQuery, deduped);
+    if (expanded !== cleanedQuery) {
+      return searchCorpus({ query: expanded, filters, store, limit });
+    }
+  }
+
+  return { queryMetadata, results: deduped };
 }
