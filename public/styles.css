@@ -733,6 +733,204 @@ p { line-height: 1.5; }
 }
 .ingest-box textarea, .ingest-box .btn.secondary { grid-column: 1 / -1; }
 
+/* ===== TRUST METER ===== */
+.trust-meter {
+  margin-bottom: 8px;
+  padding: 10px;
+  background: #f9fafb;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.trust-meter-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-bottom: 6px;
+}
+.trust-meter-header strong {
+  font-size: 16px;
+  color: var(--ink);
+}
+.trust-meter-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.trust-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--green), #34d399);
+  transition: width 0.5s ease;
+}
+.conf-breakdown {
+  display: grid;
+  gap: 4px;
+}
+.conf-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+}
+.conf-label {
+  width: 80px;
+  font-weight: 600;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.conf-track {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+.conf-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--red);
+  transition: width 0.4s ease;
+}
+.conf-value {
+  width: 28px;
+  text-align: right;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+/* ===== CITATION FIDELITY ===== */
+.fidelity-meter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+.fidelity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.fidelity-green .fidelity-dot { background: var(--green); }
+.fidelity-amber .fidelity-dot { background: var(--warning); }
+.fidelity-red .fidelity-dot { background: var(--danger); }
+.fidelity-meter strong { font-weight: 700; }
+
+/* ===== EVIDENCE GAPS ===== */
+.evidence-gaps {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.evidence-gap-item {
+  padding: 4px 8px;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  background: #fef2f2;
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 600;
+}
+.evidence-loc {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* ===== REFUSAL BANNER ===== */
+.refusal-banner {
+  padding: 12px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+}
+.refusal-banner strong {
+  display: block;
+  color: var(--danger);
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.refusal-banner p {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0;
+}
+.refusal-gaps {
+  display: grid;
+  gap: 3px;
+  padding: 0;
+  margin: 6px 0 0;
+  list-style: none;
+}
+.refusal-gaps li {
+  padding: 3px 8px;
+  background: #fff;
+  border: 1px solid #fee2e2;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--danger);
+}
+
+/* ===== QUICK ACTIONS ===== */
+.quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+/* ===== PRECEDENT TABLE ===== */
+.precedent-table-wrapper {
+  overflow-x: auto;
+}
+.precedent-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.precedent-table th {
+  padding: 6px 8px;
+  background: #f3f4f6;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  font-size: 9px;
+  text-align: left;
+  border-bottom: 2px solid var(--line);
+}
+.precedent-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.precedent-table tr:hover td { background: #f9fafb; }
+.precedent-table td.snippet {
+  font-size: 10px;
+  color: var(--muted);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ===== WARNING / GUARDRAIL ===== */
 .warning-item {
   padding: 8px 10px;

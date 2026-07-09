@@ -39,15 +39,38 @@ const TEST_QUERIES = [
   {
     query: "Vodafone India Ltd v. Union of India GST dispute analysis",
     expect: { status: "answered", minCitations: 1 }
+  },
+  /* Adversarial / edge tests */
+  {
+    query: "",
+    expect: { status: "insufficient_evidence", minCitations: 0 },
+    adversarial: true
+  },
+  {
+    query: "SELECT * FROM documents; DROP TABLE; --",
+    expect: { status: "insufficient_evidence", minCitations: 0 },
+    adversarial: true
+  },
+  {
+    query: "LOL this is not a legal query at all just gibberish",
+    expect: { status: "insufficient_evidence", minCitations: 0 },
+    adversarial: true
+  },
+  {
+    query: "a".repeat(5000),
+    expect: { status: "insufficient_evidence", minCitations: 0 },
+    adversarial: true
   }
 ];
 
 const METRICS = {
   total: 0,
   passed: 0,
+  adversarial: { total: 0, passed: 0 },
   failed: [],
-  citationFidelity: { total: 0, withMarkers: 0 },
+  citationFidelity: { total: 0, withMarkers: 0, apiReported: 0, apiAccurate: 0 },
   hallucination: { totalSentences: 0, unsupportedSentences: 0 },
+  confidenceBreakdown: { reported: 0, valid: 0 },
   latency: []
 };
 
@@ -67,6 +90,7 @@ async function evaluate() {
 
   for (const t of TEST_QUERIES) {
     METRICS.total++;
+    if (t.adversarial) METRICS.adversarial.total++;
     const start = Date.now();
     let result;
     try {
@@ -94,14 +118,32 @@ async function evaluate() {
         METRICS.citationFidelity.withMarkers++;
       }
     }
+    /* Validate API-reported citation fidelity */
+    if (result.citation_fidelity && result.citation_fidelity.total > 0) {
+      METRICS.citationFidelity.apiReported++;
+      if (result.citation_fidelity.total === sentences.length) {
+        METRICS.citationFidelity.apiAccurate++;
+      }
+    }
 
     /* Hallucination: count unsupported sentences */
     if (result.unsupported_sentences) {
       METRICS.hallucination.unsupportedSentences += result.unsupported_sentences.length;
     }
 
-    if (statusOk && citesOk && sectionOk) {
+    /* Confidence breakdown validation */
+    if (result.confidence_breakdown) {
+      METRICS.confidenceBreakdown.reported++;
+      const cb = result.confidence_breakdown;
+      if (typeof cb.topScore === "number" && typeof cb.citationCompleteness === "number") {
+        METRICS.confidenceBreakdown.valid++;
+      }
+    }
+
+    const testPassed = statusOk && citesOk && sectionOk;
+    if (testPassed) {
       METRICS.passed++;
+      if (t.adversarial) METRICS.adversarial.passed++;
       console.log(`  PASS  ${t.query.slice(0, 60)}`);
       console.log(`        status=${result.status} cites=${result.citations.length} conf=${result.confidence}% dur=${duration}ms`);
     } else {
@@ -131,11 +173,24 @@ async function evaluate() {
     ? (METRICS.hallucination.unsupportedSentences / METRICS.hallucination.totalSentences * 100).toFixed(1)
     : "N/A";
 
-  console.log(`  Pass Rate:     ${METRICS.passed}/${METRICS.total} (${(METRICS.passed / METRICS.total * 100).toFixed(0)}%)`);
-  console.log(`  Avg Latency:   ${avgLatency}ms`);
-  console.log(`  p95 Latency:   ${p95}ms`);
-  console.log(`  Citation Fidelity:  ${citFidelity}%`);
-  console.log(`  Hallucination Rate: ${hallRate}%`);
+  const advRate = METRICS.adversarial.total
+    ? `${METRICS.adversarial.passed}/${METRICS.adversarial.total}`
+    : "N/A";
+  const citFidApi = METRICS.citationFidelity.apiReported
+    ? `${METRICS.citationFidelity.apiAccurate}/${METRICS.citationFidelity.apiReported}`
+    : "N/A";
+  const confBreakdownValid = METRICS.confidenceBreakdown.reported
+    ? `${METRICS.confidenceBreakdown.valid}/${METRICS.confidenceBreakdown.reported}`
+    : "N/A";
+
+  console.log(`  Pass Rate:            ${METRICS.passed}/${METRICS.total} (${(METRICS.passed / METRICS.total * 100).toFixed(0)}%)`);
+  console.log(`  Adversarial:          ${advRate}`);
+  console.log(`  Avg Latency:          ${avgLatency}ms`);
+  console.log(`  p95 Latency:          ${p95}ms`);
+  console.log(`  Citation Fidelity:    ${citFidelity}%`);
+  console.log(`  API Fidelity Accur:   ${citFidApi}`);
+  console.log(`  Hallucination Rate:   ${hallRate}%`);
+  console.log(`  Confidence Breakdown: ${confBreakdownValid}`);
 
   if (METRICS.failed.length) {
     console.log();

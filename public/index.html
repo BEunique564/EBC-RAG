@@ -130,7 +130,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <section class="card">
         <h3>Verification &amp; Retrieval Trace</h3>
         <div class="verification-grid">
           <div><dt>Status</dt><dd id="statusMetric">Idle</dd></div>
@@ -141,12 +141,17 @@
         </div>
         <div id="validationList" class="validation-list"></div>
         <div id="traceList" class="trace-list"></div>
-      </div>
+      </section>
 
-      <div class="card">
+      <section class="card" id="issuesPanel" style="display:none">
+        <h3>Issues &amp; Evidence Gaps</h3>
+        <div id="issuesContent"></div>
+      </section>
+
+      <section class="card">
         <h3>Citation Details</h3>
         <div id="citationsList" class="scroll-list"></div>
-      </div>
+      </section>
     </section>
 
     <aside class="sidebar sidebar-right">

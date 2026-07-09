@@ -122,9 +122,57 @@ function renderTrace(result) {
     : `<div class="trace-step failed"><span>No retrieval trace</span><strong>Blocked</strong></div>`;
 }
 
+function trustMeter(confidence, breakdown) {
+  if (confidence == null || confidence === 0) return '';
+  const b = breakdown || {};
+  return `<div class="trust-meter">
+    <div class="trust-meter-header"><span>Trust Score</span><strong>${confidence}%</strong></div>
+    <div class="trust-meter-bar">
+      <div class="trust-fill" style="width:${confidence}%"></div>
+    </div>
+    <div class="conf-breakdown">
+      <div class="conf-row"><span class="conf-label">Relevance</span><div class="conf-track"><div class="conf-fill" style="width:${b.topScore || 0}%"></div></div><span class="conf-value">${b.topScore || 0}%</span></div>
+      <div class="conf-row"><span class="conf-label">Completeness</span><div class="conf-track"><div class="conf-fill" style="width:${b.citationCompleteness || 0}%"></div></div><span class="conf-value">${b.citationCompleteness || 0}%</span></div>
+      <div class="conf-row"><span class="conf-label">Corroboration</span><div class="conf-track"><div class="conf-fill" style="width:${b.corroboration || 0}%"></div></div><span class="conf-value">${b.corroboration || 0}%</span></div>
+      <div class="conf-row"><span class="conf-label">Coverage</span><div class="conf-track"><div class="conf-fill" style="width:${b.sourceCoverage || 0}%"></div></div><span class="conf-value">${b.sourceCoverage || 0}%</span></div>
+    </div>
+  </div>`;
+}
+
+function citationFidelityMeter(fidelity) {
+  if (!fidelity || !fidelity.total) return '';
+  const pct = fidelity.fidelity || 0;
+  const cls = pct >= 90 ? 'green' : pct >= 70 ? 'amber' : 'red';
+  return `<div class="fidelity-meter fidelity-${cls}">
+    <span class="fidelity-dot"></span>
+    <span>${fidelity.withMarkers}/${fidelity.total} sentences sourced — <strong>${pct}% citation fidelity</strong></span>
+  </div>`;
+}
+
+function evidenceGapList(gaps) {
+  if (!gaps || !gaps.length) return '';
+  return `<div class="evidence-gaps">${gaps.map(g => `<div class="evidence-gap-item">${escapeHtml(g)}</div>`).join('')}</div>`;
+}
+
 function answerMessageHtml(result) {
   let answer = escapeHtml(result.answer);
   const citations = result.citations || [];
+  const isRefused = result.status !== "answered";
+
+  if (isRefused) {
+    const reason = escapeHtml(result.failure_reason_human || result.reason || '');
+    const gaps = result.evidence_gaps || [];
+    return `<div class="refusal-banner">
+      <strong>Answer Blocked</strong>
+      <p>${reason}</p>
+      ${gaps.length ? `<ul class="refusal-gaps">${gaps.map(g => `<li>${escapeHtml(g)}</li>`).join('')}</ul>` : ''}
+    </div>
+    <div class="message-meta">
+      <span class="meta-chip refused">Insufficient Evidence</span>
+      <span class="meta-chip">${result.citations?.length || 0} citations</span>
+      ${result.user_tier ? tierBadge(result.user_tier) : ''}
+    </div>`;
+  }
 
   /* Highlight quoted text (within double quotes in original answer) */
   answer = answer.replace(/"([^"]+)"/g, '<mark class="quote-highlight">"$1"</mark>');
@@ -147,17 +195,23 @@ function answerMessageHtml(result) {
       ).join('')}</div>`
     : '';
 
-  /* Collapsible evidence section */
+  /* Collapsible evidence section with paragraph locators */
   const evidenceHtml = citations.length
     ? `<details class="evidence-details" ${citations.length > 2 ? '' : 'open'}>
         <summary>View ${citations.length} cited source${citations.length > 1 ? 's' : ''}</summary>
-        <div class="evidence-list">${citations.map(c => `<div class="evidence-item"><strong>${escapeHtml(c.source_id)}</strong> ${escapeHtml(c.title)} — <span class="snippet">${escapeHtml(c.snippet?.slice(0, 200))}…</span></div>`).join('')}</div>
+        <div class="evidence-list">${citations.map(c => {
+          const loc = (c.locator || '') || (c.paragraph ? `para ${c.paragraph}` : c.pdf_page ? `page ${c.pdf_page}` : '');
+          return `<div class="evidence-item"><strong>${escapeHtml(c.source_id)}</strong> ${escapeHtml(c.title)}${loc ? ` <span class="evidence-loc">${escapeHtml(loc)}</span>` : ''}<br><span class="snippet">${escapeHtml(c.snippet?.slice(0, 200))}…</span></div>`;
+        }).join('')}</div>
        </details>`
     : '';
 
+  const fidelityHtml = citationFidelityMeter(result.citation_fidelity);
+  const trustHtml = trustMeter(result.confidence, result.confidence_breakdown);
   const unsupportedWarn = result.unsupported_sentences?.length
     ? `<div class="warning-item">${result.unsupported_sentences.length} sentence(s) lack direct source markers. Verify before relying.</div>`
     : '';
+  const gapHtml = evidenceGapList(result.evidence_gaps);
 
   const isAdviceLabel = result.is_advice_query
     ? `<span class="meta-chip" style="background:#fef3c7;color:#92400e">Advice query — research only</span>`
@@ -168,7 +222,10 @@ function answerMessageHtml(result) {
     : `<span class="meta-chip" style="background:#f3f4f6;color:var(--muted)">Direct Extract</span>`;
   const w = (result.warnings || []).slice(0, 2).map(w => `<div class="warning-item">${escapeHtml(w)}</div>`).join("");
   const areas = (result.practice_areas || []).map(a => practiceBadge(a)).join("");
-  return `<pre class="answer-text">${answer}</pre>
+  return `${trustHtml}
+    ${fidelityHtml}
+    ${gapHtml}
+    <pre class="answer-text">${answer}</pre>
     ${sourceBar}
     ${evidenceHtml}
     ${unsupportedWarn}
@@ -269,13 +326,90 @@ function renderWorkspace() {
     : `<article class="workspace-card"><strong>No saved research yet</strong><p class="snippet">Run a query, then save answers or sources to build a research memo.</p></article>`;
 }
 
+function renderPrecedentTable(citations) {
+  if (!citations || citations.length < 2) return '';
+  return `<div class="precedent-table-wrapper">
+    <table class="precedent-table">
+      <thead><tr><th>Source</th><th>Court</th><th>Year</th><th>Section</th><th>Relevance</th></tr></thead>
+      <tbody>${citations.map(c => `<tr><td><strong>${escapeHtml(c.source_id)}</strong> ${escapeHtml(c.title?.slice(0, 40))}</td><td>${escapeHtml(c.court || '-')}</td><td>${escapeHtml(c.year || '-')}</td><td>${escapeHtml(c.section || '-')}</td><td class="snippet">${escapeHtml(c.snippet?.slice(0, 60))}…</td></tr>`).join('')}</tbody>
+    </table>
+  </div>`;
+}
+
 function exportMemo() {
   const r = state.lastResult;
-  const lines = ["EBC Legal AI Assistant — Research Memo", "", `Query: ${state.lastQuery || "Initial demo query"}`, `Status: ${r?.status || "not run"}`, `Confidence: ${r?.confidence || 0}%`, "", "Answer:", r?.answer || "", "", "Saved Research:", ...state.workspace.map((i, idx) => `${idx + 1}. ${i.title} - ${i.detail || ""}`), "", "Citations:", ...(r?.citations || []).map(c => `${c.source_id}: ${c.title} (${c.citation}) para ${c.paragraph || "-"} page ${c.pdf_page || "-"}`)];
+  const lines = [];
+  lines.push("====================================================================");
+  lines.push("EBC LEGAL AI ASSISTANT — RESEARCH MEMO");
+  lines.push("====================================================================");
+  lines.push("");
+  lines.push("QUERY");
+  lines.push("--------------------------------------------------------------------");
+  lines.push(state.lastQuery || "Initial demo query");
+  lines.push("");
+  lines.push("STATUS & CONFIDENCE");
+  lines.push("--------------------------------------------------------------------");
+  lines.push(`Status: ${r?.status || "not run"}`);
+  lines.push(`Confidence: ${r?.confidence || 0}%`);
+  lines.push(`Label: ${r?.confidence_label || "N/A"}`);
+  lines.push(`Intent: ${r?.query_intent || "N/A"}`);
+  if (r?.issues?.length) lines.push(`Issues: ${r.issues.join(", ")}`);
+  if (r?.citation_fidelity) lines.push(`Citation Fidelity: ${r.citation_fidelity.withMarkers}/${r.citation_fidelity.total} sentences sourced`);
+  lines.push("");
+  lines.push("ANSWER");
+  lines.push("--------------------------------------------------------------------");
+  lines.push(r?.answer || "");
+  lines.push("");
+  if (r?.citations?.length) {
+    lines.push("CITED SOURCES");
+    lines.push("--------------------------------------------------------------------");
+    for (const c of r.citations) {
+      const loc = [c.paragraph ? `para ${c.paragraph}` : '', c.pdf_page ? `page ${c.pdf_page}` : '', c.section ? `Section ${c.section}` : ''].filter(Boolean).join(', ');
+      lines.push(`  [${c.source_id}] ${c.title}`);
+      if (c.citation) lines.push(`       Citation: ${c.citation}`);
+      if (c.court) lines.push(`       Court: ${c.court}`);
+      if (c.year) lines.push(`       Year: ${c.year}`);
+      if (loc) lines.push(`       Location: ${loc}`);
+      if (c.snippet) lines.push(`       Excerpt: ${c.snippet.slice(0, 300)}`);
+      lines.push("");
+    }
+  }
+  lines.push("SAVED RESEARCH ITEMS");
+  lines.push("--------------------------------------------------------------------");
+  if (state.workspace.length) {
+    state.workspace.forEach((i, idx) => lines.push(`  ${idx + 1}. ${i.title} - ${i.detail || ""}`));
+  } else {
+    lines.push("  (none)");
+  }
+  lines.push("");
+  lines.push("DISCLAIMER");
+  lines.push("--------------------------------------------------------------------");
+  lines.push("This memo was generated by the EBC Legal AI Assistant. It is based on the indexed corpus and is not a substitute for professional legal advice. Always verify citations against the original sources and consult a licensed attorney.");
   const b = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = "ebc-research-memo.txt"; a.click();
   URL.revokeObjectURL(b);
   trackClick("memo_export", { citation_count: r?.citations?.length || 0 });
+}
+
+function renderIssues(result) {
+  const issues = result.issues || [];
+  const issuesPanel = document.getElementById("issuesPanel");
+  const issuesContent = document.getElementById("issuesContent");
+  if (!issuesPanel || !issuesContent) return;
+  if (!issues.length && !result.evidence_gaps?.length) {
+    issuesPanel.style.display = "none";
+    return;
+  }
+  issuesPanel.style.display = "block";
+  const items = issues.map(i => `<span class="meta-chip blue">${escapeHtml(i)}</span>`).join('');
+  const gaps = (result.evidence_gaps || []).map(g => `<div class="evidence-gap-item">${escapeHtml(g)}</div>`).join('');
+  issuesContent.innerHTML = `
+    ${items ? `<div class="chip-row">${items}</div>` : ''}
+    ${gaps ? `<div class="evidence-gaps" style="margin-top:6px">${gaps}</div>` : ''}
+    <div class="quick-actions">
+      <button class="link-button" data-action="copy-citations">Copy citations</button>
+      <button class="link-button" data-action="compare-precedents">Compare precedents</button>
+    </div>`;
 }
 
 function renderResult(result, query) {
@@ -291,6 +425,7 @@ function renderResult(result, query) {
   if (query) addMessage({ role: "user", html: `<pre>${escapeHtml(query)}</pre>` });
   addMessage({ role: "bot", html: answerMessageHtml(result) });
   renderTrace(result);
+  renderIssues(result);
   elements.validationList.innerHTML = result.citation_validation.checked.length
     ? result.citation_validation.checked.map(i => `<div class="validation-item ${i.valid ? "valid" : "invalid"}"><strong>${escapeHtml(i.source_id)}</strong><div>${i.valid ? "Citation metadata verified" : `Missing: ${escapeHtml(i.missing.join(", "))}`}</div></div>`).join("")
     : `<div class="validation-item invalid">No citation set passed validation.</div>`;
@@ -308,7 +443,10 @@ function renderResult(result, query) {
     </article>`).join("")
     : `<article class="authority-card"><h3>No related authority</h3><p class="snippet">The indexed corpus did not produce a safe match. Try a different query or add more sources.</p></article>`;
   elements.citationsList.innerHTML = result.citations.length
-    ? result.citations.map(c => `<article class="citation-card"><h3>${escapeHtml(c.source_id)} ${escapeHtml(c.title)}</h3><div class="metadata-line">${metadataChips(c)}</div><p class="snippet">${escapeHtml(c.snippet)}</p></article>`).join("")
+    ? result.citations.map(c => {
+        const loc = (c.locator || '') || (c.paragraph ? `para ${c.paragraph}` : c.pdf_page ? `page ${c.pdf_page}` : '');
+        return `<article class="citation-card"><h3>${escapeHtml(c.source_id)} ${escapeHtml(c.title)}</h3><div class="metadata-line">${metadataChips(c)}${loc ? `<span class="meta-chip">${escapeHtml(loc)}</span>` : ''}</div><p class="snippet">${escapeHtml(c.snippet)}</p></article>`;
+      }).join("")
     : `<article class="citation-card"><h3>No citations released</h3><p class="snippet">The answer was blocked because evidence was insufficient. The system refuses to generate unsupported legal statements.</p></article>`;
   renderProducts(result.product_recommendations || []);
   if (result.practice_areas?.length) state.practiceAreas = result.practice_areas;
@@ -446,6 +584,33 @@ elements.relatedScroller.addEventListener("click", async (e) => {
   if (t.dataset.action === "save-source") {
     const s = state.lastResult?.related_documents?.find(i => i.document_id === id);
     saveWorkspaceItem({ id: `source:${id}`, title: s?.title || "Saved source", detail: s?.citation || s?.match_explanation || "" });
+  }
+});
+
+/* Quick actions */
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("[data-action]");
+  if (!t || !t.dataset.action) return;
+  if (t.dataset.action === "copy-citations") {
+    const cites = state.lastResult?.citations || [];
+    if (!cites.length) return;
+    const text = cites.map(c => `[${c.source_id}] ${c.title} — ${c.citation || ''} (${c.court || ''} ${c.year || ''})`).join("\n");
+    navigator.clipboard.writeText(text).catch(() => {});
+    trackClick("copy_citations", { count: cites.length });
+  }
+  if (t.dataset.action === "compare-precedents") {
+    const cites = state.lastResult?.citations || [];
+    if (cites.length < 2) return;
+    const existing = document.getElementById("precedentTable");
+    if (existing) existing.remove();
+    const wrapper = document.createElement("div");
+    wrapper.id = "precedentTable";
+    wrapper.innerHTML = `<div class="card"><h3>Precedent Comparison</h3>${renderPrecedentTable(cites)}<button class="link-button" data-action="close-precedent-table" style="margin-top:6px">Close</button></div>`;
+    document.querySelector(".sidebar-right")?.prepend(wrapper);
+    trackClick("compare_precedents", { count: cites.length });
+  }
+  if (t.dataset.action === "close-precedent-table") {
+    document.getElementById("precedentTable")?.remove();
   }
 });
 

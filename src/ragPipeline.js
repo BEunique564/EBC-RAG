@@ -105,15 +105,25 @@ function sentenceCitationCheck(text) {
   return unsupported;
 }
 
-function confidenceFrom(results, citations, validation) {
-  if (!results.length || !validation.valid) return 0;
+function calculateConfidence(results, citations, validation) {
+  if (!results.length || !validation.valid) {
+    return { total: 0, breakdown: { topScore: 0, citationCompleteness: 0, corroboration: 0, sourceCoverage: 0 } };
+  }
   const topScore = Math.min(results[0].score, 1);
   const citationCompleteness = validation.checked.filter((item) => item.valid).length / Math.max(validation.checked.length, 1);
   const corroboration = Math.min(citations.length / 4, 1);
   const uniqueDocs = new Set(results.map(r => r.document?.document_id)).size;
   const sourceCoverage = Math.min(uniqueDocs / Math.max(citations.length, 1), 1);
   const raw = (topScore * 0.55) + (citationCompleteness * 0.15) + (corroboration * 0.10) + (sourceCoverage * 0.20);
-  return Math.round(raw * 100);
+  return {
+    total: Math.round(raw * 100),
+    breakdown: {
+      topScore: Math.round(topScore * 100),
+      citationCompleteness: Math.round(citationCompleteness * 100),
+      corroboration: Math.round(corroboration * 100),
+      sourceCoverage: Math.round(sourceCoverage * 100)
+    }
+  };
 }
 
 function relatedDocuments(results) {
@@ -202,6 +212,43 @@ function rankProducts(related, query, userTier) {
   return scored.sort((a, b) => b.score - a.score).slice(0, 6);
 }
 
+const FAILURE_REASONS = {
+  empty_query: "No query text was provided. Please enter a legal research question.",
+  no_retrieved_evidence: "Your query did not match any documents in the indexed legal corpus. This could mean the topic is not yet indexed, the legal terminology differs from what is in the corpus, or the query is too specific. Try broadening your search or using different legal keywords.",
+  retrieved_evidence_failed_validation: "Documents were found, but they failed quality checks. Either the top match scored too low for safe use, or the citations were missing required metadata (court, year, citation format). The system blocks answers when it cannot guarantee reliable sourcing.",
+  sentence_citation_check_failed: "The generated answer contained sentences without source markers, so it was blocked to prevent unsupported legal claims."
+};
+
+function failureReasonHuman(reason) {
+  return FAILURE_REASONS[reason] || "The system could not safely answer this query based on available evidence.";
+}
+
+const ISSUE_PATTERNS = [
+  { issue: "Criminal Liability", patterns: [/ipc/, /420/, /cheating/, /bail/, /crpc/, /criminal/, /fraud/, /murder/, /penal/] },
+  { issue: "Taxation", patterns: [/gst/, /cgst/, /input tax credit/, /itc/, /income tax/, /customs/, /excise/, /tax/] },
+  { issue: "Constitutional Rights", patterns: [/constitution/, /article \d+/, /fundamental right/, /writ/, /privacy/] },
+  { issue: "Insolvency & Bankruptcy", patterns: [/ibc/, /insolvency/, /bankruptcy/, /nclat/, /nclt/, /resolution/] },
+  { issue: "Civil Disputes", patterns: [/civil/, /tort/, /contract/, /property/, /transfer/, /specific relief/, /limitation/] },
+  { issue: "Labour & Employment", patterns: [/labour/, /industrial/, /employee/, /workman/, /gratuity/] }
+];
+
+function extractIssues(query) {
+  const q = (query || "").toLowerCase();
+  return ISSUE_PATTERNS.filter(pa => pa.patterns.some(p => p.test(q))).map(pa => pa.issue);
+}
+
+function citationFidelity(text) {
+  const sentences = splitSentences(text || "");
+  let total = 0, withMarkers = 0;
+  for (const s of sentences) {
+    const t = s.trim();
+    if (!t) continue;
+    total++;
+    if (/\[\w+\]/.test(t) || t.startsWith("Based only") || t.startsWith("Case:")) withMarkers++;
+  }
+  return { total, withMarkers, fidelity: total > 0 ? (withMarkers / total * 100) : 0 };
+}
+
 function warningSet(query, citations, queryMetadata) {
   const warnings = [];
   if (queryMetadata.latest) {
@@ -242,11 +289,17 @@ function refusal(queryMetadata, results = [], reason = "insufficient_evidence", 
   return {
     status: "insufficient_evidence",
     answer: "I could not find sufficient authoritative legal sources in the indexed corpus to answer this safely.",
+    failure_reason_human: failureReasonHuman(reason),
     confidence: 0,
+    confidence_breakdown: { topScore: 0, citationCompleteness: 0, corroboration: 0, sourceCoverage: 0 },
+    citation_fidelity: { total: 0, withMarkers: 0, fidelity: 0 },
     reason,
     is_advice_query: detectAdviceQuery(query),
     query_intent: inferIntent("", queryMetadata),
+    issues: extractIssues(query),
     metadata_filters: queryMetadata,
+    evidence_gaps: reason === "no_retrieved_evidence" ? ["No documents matched the query"] :
+      reason === "retrieved_evidence_failed_validation" ? ["Top document score too low", "Citations missing metadata"] : [],
     citations: [],
     citation_validation: { valid: false, checked: [] },
     related_documents: related,
@@ -288,7 +341,7 @@ export async function answerLegalQuery({ query, filters = {}, role = "lawyer", s
     return refusal(queryMetadata, results, "retrieved_evidence_failed_validation", filters, cleanedQuery, userTier);
   }
 
-  const confidence = confidenceFrom(results, citations, validation);
+  const { total: confidence, breakdown: confidenceBreakdown } = calculateConfidence(results, citations, validation);
   const related = relatedDocuments(results);
   const intent = inferIntent(cleanedQuery, queryMetadata);
   const isAdvice = detectAdviceQuery(cleanedQuery);
@@ -309,6 +362,7 @@ export async function answerLegalQuery({ query, filters = {}, role = "lawyer", s
 
   /* Sentence-level citation grounding check */
   const unsupported = sentenceCitationCheck(answer);
+  const fidelity = citationFidelity(answer);
   const allSentencesHaveCitations = unsupported.length === 0;
 
   if (!allSentencesHaveCitations) {
@@ -335,8 +389,13 @@ export async function answerLegalQuery({ query, filters = {}, role = "lawyer", s
     answer,
     answer_type: answerType,
     parties: queryMetadata.parties,
+    failure_reason_human: null,
     confidence,
     confidence_label: confidenceLabel,
+    confidence_breakdown: confidenceBreakdown,
+    citation_fidelity: { total: fidelity.total, withMarkers: fidelity.withMarkers, fidelity: Math.round(fidelity.fidelity) },
+    issues: extractIssues(cleanedQuery),
+    evidence_gaps: unsupported.length ? [`${unsupported.length} sentence(s) lack direct source markers`] : [],
     is_advice_query: isAdvice,
     query_intent: intent,
     user_role: role,
