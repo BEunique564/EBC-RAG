@@ -3,6 +3,7 @@ import { searchCorpus } from "./search.js";
 import { splitSentences, tokenize } from "./tokenize.js";
 import { generateWithLLM } from "./llm.js";
 import { SUMMARIZE_WITH_OUTCOMES, buildLLMContent } from "./prompts.js";
+import { crossEncode } from "./reranker.js";
 
 const MIN_TOP_SCORE = 0.18;
 const MIN_VALID_CITATIONS = 1;
@@ -32,28 +33,47 @@ function detectAdviceQuery(query) {
   return advicePatterns.some(p => p.test(query));
 }
 
-function extractBestSentence(chunkText, query) {
+function extractExactPassage(chunkText, query) {
   const queryTokens = new Set(tokenize(query));
   const sentences = splitSentences(chunkText);
-  if (!sentences.length) return chunkText;
+  if (!sentences.length) return { text: chunkText, paragraph: "", page: "" };
+
   let best = sentences[0], bestScore = -1;
+  let bestSecond = null, secondScore = -1;
   for (const sentence of sentences) {
     const sentenceTokens = tokenize(sentence);
     let overlap = 0;
     for (const token of sentenceTokens) { if (queryTokens.has(token)) overlap += 1; }
-    if (overlap > bestScore) { bestScore = overlap; best = sentence; }
+    if (overlap > bestScore) { secondScore = bestScore; bestSecond = best; bestScore = overlap; best = sentence; }
+    else if (overlap > secondScore) { secondScore = overlap; bestSecond = sentence; }
   }
-  return best;
+
+  let passage = best;
+  if (bestSecond && secondScore > 0) {
+    passage = `${best} ${bestSecond}`;
+  }
+
+  return { text: passage, paragraph: "", page: "" };
+}
+
+function paragraphCitation(citation) {
+  const locators = [];
+  if (citation.paragraph) locators.push(`para ${citation.paragraph}`);
+  if (citation.pdf_page) locators.push(`page ${citation.pdf_page}`);
+  if (citation.section) locators.push(`Section ${citation.section}`);
+  const locStr = locators.length ? ` (${locators.join(", ")})` : "";
+  return locStr;
 }
 
 function partyAnswer(citations, parties) {
   const top = citations.slice(0, 4);
   const lines = [`Case: ${parties.petitioner} vs ${parties.respondent}`];
   for (const c of top) {
-    const sent = extractBestSentence(c.snippet, `${parties.petitioner} ${parties.respondent}`);
+    const { text } = extractExactPassage(c.snippet, `${parties.petitioner} ${parties.respondent}`);
+    const loc = paragraphCitation(c);
     const pdf = c.source_pdf_url && !c.source_pdf_url.startsWith("local://") ? `\nPDF: ${c.source_pdf_url}` : "";
     const reader = c.ebc_reader_url && !c.ebc_reader_url.startsWith("local://") ? `\nReader: ${c.ebc_reader_url}` : "";
-    lines.push(`\n[${c.source_id}] ${sent}\nSource: ${c.title} (${c.court || ""} ${c.year || ""})${pdf}${reader}`);
+    lines.push(`\n[${c.source_id}] "${text}"${loc}\nSource: ${c.title} (${c.court || ""} ${c.year || ""})${pdf}${reader}`);
   }
   return lines.join("\n\n");
 }
@@ -61,10 +81,11 @@ function partyAnswer(citations, parties) {
 function buildAnswer(query, citations) {
   const topCitations = citations.slice(0, 4);
   const statements = topCitations.map((citation) => {
-    const sentence = extractBestSentence(citation.snippet, query);
+    const { text } = extractExactPassage(citation.snippet, query);
+    const loc = paragraphCitation(citation);
     const pdf = citation.source_pdf_url && !citation.source_pdf_url.startsWith("local://") ? ` PDF: ${citation.source_pdf_url}` : "";
     const reader = citation.ebc_reader_url && !citation.ebc_reader_url.startsWith("local://") ? ` Reader: ${citation.ebc_reader_url}` : "";
-    return `${sentence} [${citation.source_id}]${pdf}${reader}`;
+    return `"${text}"${loc} [${citation.source_id}]${pdf}${reader}`;
   });
   return ["Based only on the retrieved sources:", ...statements].join("\n\n");
 }
@@ -298,6 +319,17 @@ export async function answerLegalQuery({ query, filters = {}, role = "lawyer", s
 
   const confidenceLabel = confidence >= 90 ? "high" : confidence >= 70 ? "moderate" : "low";
 
+  const passageCites = citations.map(c => {
+    const loc = paragraphCitation(c);
+    return { source_id: c.source_id, paragraph: c.paragraph, pdf_page: c.pdf_page, section: c.section, locator: loc.trim() };
+  });
+
+  const rerankerSignals = results.slice(0, 4).map(r => ({
+    source_id: r.reranker ? `S${results.indexOf(r) + 1}` : null,
+    score: r.reranker?.score,
+    signals: r.reranker?.signals
+  })).filter(r => r.source_id);
+
   const result = {
     status: "answered",
     answer,
@@ -312,6 +344,8 @@ export async function answerLegalQuery({ query, filters = {}, role = "lawyer", s
     metadata_filters: queryMetadata,
     citations,
     citation_validation: validation,
+    paragraph_citations: passageCites,
+    reranker_signals: rerankerSignals,
     unsupported_sentences: unsupported,
     related_documents: related,
     product_recommendations: rankProducts(related, cleanedQuery, userTier),

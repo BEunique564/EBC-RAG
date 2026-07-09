@@ -71,3 +71,51 @@ export function getHallucinationSummary() {
     hallucination_risk: withUnsupported > 0 ? "monitor" : "low"
   };
 }
+
+/* Latency tracking */
+const latencySamples = [];
+
+export function recordLatency(operation, durationMs) {
+  latencySamples.push({ operation, durationMs, ts: Date.now() });
+  if (latencySamples.length > 10000) latencySamples.shift();
+}
+
+export function getLatencySummary(operation) {
+  const samples = operation
+    ? latencySamples.filter(s => s.operation === operation)
+    : latencySamples;
+  if (!samples.length) return { p50: 0, p95: 0, p99: 0, avg: 0, count: 0 };
+  const sorted = [...samples].map(s => s.durationMs).sort((a, b) => a - b);
+  const n = sorted.length;
+  return {
+    count: n,
+    avg: Math.round(sorted.reduce((a, b) => a + b, 0) / n),
+    p50: sorted[Math.floor(n * 0.50)],
+    p95: sorted[Math.floor(n * 0.95)],
+    p99: sorted[Math.floor(n * 0.99)]
+  };
+}
+
+/* User feedback */
+const feedbackLog = [];
+
+export function recordFeedback({ userId, query, rating, comments, metadata }) {
+  feedbackLog.push({
+    userId, query: (query || "").slice(0, 200), rating, comments, metadata,
+    ts: new Date().toISOString()
+  });
+  if (feedbackLog.length > 5000) feedbackLog.shift();
+}
+
+export function getFeedbackSummary() {
+  const total = feedbackLog.length;
+  if (!total) return { total: 0, avg_rating: 0, distribution: {} };
+  const ratings = feedbackLog.filter(f => f.rating != null);
+  const avgRating = ratings.length ? ratings.reduce((s, f) => s + f.rating, 0) / ratings.length : 0;
+  const dist = {};
+  for (const f of ratings) {
+    const r = f.rating.toString();
+    dist[r] = (dist[r] || 0) + 1;
+  }
+  return { total, avg_rating: Number(avgRating.toFixed(2)), distribution: dist };
+}

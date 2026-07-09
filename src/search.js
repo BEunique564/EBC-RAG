@@ -1,5 +1,10 @@
-import { cosineSimilarity, expandTokens, tokenCounts, tokenize } from "./tokenize.js";
+import { expandTokens, tokenCounts, tokenize } from "./tokenize.js";
 import { documentMatchesFilters, extractQueryMetadata, metadataBoost } from "./metadata.js";
+import { embedChunk, embedQuery, embeddingSimilarity } from "./embeddings.js";
+import { rerankResults } from "./reranker.js";
+
+const RRF_K = 60;
+const MIN_BM25 = 0.01;
 
 function bm25Score(queryTokens, chunk, index) {
   const k1 = 1.4;
@@ -18,35 +23,6 @@ function bm25Score(queryTokens, chunk, index) {
   }
 
   return score;
-}
-
-function normalizeScores(results, field) {
-  const max = Math.max(...results.map((result) => result[field]), 0.0001);
-  for (const result of results) {
-    result[`${field}_normalized`] = result[field] / max;
-  }
-}
-
-function phraseScore(query, chunk, document) {
-  const normalizedQuery = query.toLowerCase();
-  const haystack = `${document.title} ${document.citation} ${chunk.text}`.toLowerCase();
-  const quotedTerms = [...query.matchAll(/"([^"]+)"/g)].map((match) => match[1].toLowerCase());
-
-  let score = 0;
-  for (const phrase of quotedTerms) {
-    if (haystack.includes(phrase)) score += 0.2;
-  }
-
-  const importantPhrases = [
-    "input tax credit", "section 16", "supreme court",
-    "personal data", "interim resolution professional"
-  ];
-
-  for (const phrase of importantPhrases) {
-    if (normalizedQuery.includes(phrase) && haystack.includes(phrase)) score += 0.12;
-  }
-
-  return Math.min(score, 0.4);
 }
 
 function keywordExactScore(query, chunk, document) {
@@ -78,30 +54,8 @@ function keywordExactScore(query, chunk, document) {
   return Math.min(score, 0.5);
 }
 
-function rerank(candidates, query) {
-  const q = query.toLowerCase();
-  const qTokens = new Set(tokenize(q));
-
-  return candidates.map(c => {
-    const text = `${c.document.title} ${c.chunk.text}`.toLowerCase();
-    const textTokens = tokenize(text);
-
-    const exactOverlap = [...qTokens].filter(t => textTokens.includes(t)).length;
-    const recall = qTokens.size ? exactOverlap / qTokens.size : 0;
-
-    const doc = c.document;
-    const metadataHits = [
-      doc.citation && q.includes(doc.citation.toLowerCase()),
-      doc.court && q.includes(doc.court.toLowerCase()),
-      doc.judge && q.includes(doc.judge.toLowerCase()),
-      doc.act && q.includes(doc.act.toLowerCase()),
-      doc.section && q.includes(`section ${doc.section}`.toLowerCase())
-    ].filter(Boolean).length * 0.06;
-
-    const rerankBonus = (recall * 0.15) + metadataHits;
-
-    return { ...c, rerank_bonus: rerankBonus };
-  });
+function rrfScore(rank, k = RRF_K) {
+  return 1 / (k + rank);
 }
 
 function expandQuery(query, results) {
@@ -119,27 +73,31 @@ export function searchCorpus({ query, filters = {}, store, limit = 15 }) {
   const queryCounts = tokenCounts(queryTokens);
   const queryMetadata = extractQueryMetadata(cleanedQuery);
   const index = store.getIndex();
+  const queryVec = embedQuery(cleanedQuery);
 
-  const candidates = [];
+  const bm25Ranks = [];
+  const denseRanks = [];
+  const keywordRanks = [];
+  const allCandidates = [];
 
-  for (const chunk of index.chunks) {
+  for (let i = 0; i < index.chunks.length; i++) {
+    const chunk = index.chunks[i];
     const document = chunk.document;
     if (!documentMatchesFilters(document, filters, queryMetadata)) continue;
 
     const bm25 = bm25Score(queryTokens, chunk, index);
-    const dense = cosineSimilarity(queryCounts, chunk.counts);
-    const meta = metadataBoost(document, chunk, queryMetadata);
-    const phrase = phraseScore(cleanedQuery, chunk, document);
+    const chunkVec = embedChunk(chunk);
+    const dense = embeddingSimilarity(queryVec, chunkVec);
     const keyword = keywordExactScore(cleanedQuery, chunk, document);
 
-    if (bm25 === 0 && dense === 0 && meta === 0 && phrase === 0 && keyword === 0) continue;
+    if (bm25 === 0 && dense === 0 && keyword === 0) continue;
 
-    candidates.push({
-      chunk, document, bm25, dense, meta, phrase, keyword, queryMetadata
+    allCandidates.push({
+      chunk, document, bm25, dense, keyword, queryMetadata, index: i
     });
   }
 
-  if (!candidates.length) {
+  if (!allCandidates.length) {
     const expanded = expandQuery(cleanedQuery, []);
     if (expanded !== cleanedQuery) {
       return searchCorpus({ query: expanded, filters, store, limit });
@@ -147,31 +105,47 @@ export function searchCorpus({ query, filters = {}, store, limit = 15 }) {
     return { queryMetadata, results: [] };
   }
 
-  normalizeScores(candidates, "bm25");
-  normalizeScores(candidates, "dense");
+  const bm25Sorted = [...allCandidates].sort((a, b) => b.bm25 - a.bm25);
+  const denseSorted = [...allCandidates].sort((a, b) => b.dense - a.dense);
+  const keywordSorted = [...allCandidates].sort((a, b) => b.keyword - a.keyword);
 
-  const withRerank = rerank(candidates, cleanedQuery);
+  const bm25RankMap = new Map();
+  const denseRankMap = new Map();
+  const keywordRankMap = new Map();
 
-  const ranked = withRerank
-    .map((candidate) => {
-      const rawScore = (candidate.bm25_normalized * 0.35) +
-        (candidate.dense_normalized * 0.20) +
-        candidate.meta +
-        candidate.phrase +
-        (candidate.keyword * 0.20) +
-        candidate.rerank_bonus;
+  for (const [rank, c] of bm25Sorted.entries()) {
+    if (c.bm25 >= MIN_BM25) bm25RankMap.set(c.index, rank);
+  }
+  for (const [rank, c] of denseSorted.entries()) {
+    denseRankMap.set(c.index, rank);
+  }
+  for (const [rank, c] of keywordSorted.entries()) {
+    if (c.keyword > 0) keywordRankMap.set(c.index, rank);
+  }
 
-      return {
-        ...candidate,
-        raw_score: rawScore,
-        score: Math.min(rawScore, 1)
-      };
-    })
-    .sort((a, b) => b.score - a.score);
+  const withRrf = allCandidates.map(c => {
+    let rrf = 0;
+    let systems = 0;
+    if (bm25RankMap.has(c.index)) { rrf += rrfScore(bm25RankMap.get(c.index)); systems++; }
+    if (denseRankMap.has(c.index)) { rrf += rrfScore(denseRankMap.get(c.index)); systems++; }
+    if (keywordRankMap.has(c.index)) { rrf += rrfScore(keywordRankMap.get(c.index)); systems++; }
+    const meta = metadataBoost(c.document, c.chunk, queryMetadata);
+    return { ...c, rrf: systems ? rrf / systems : 0, meta };
+  });
+
+  const rrfSorted = withRrf.sort((a, b) => {
+    const diff = b.rrf - a.rrf;
+    if (Math.abs(diff) > 0.001) return diff;
+    return b.bm25 - a.bm25;
+  });
+
+  for (const c of rrfSorted) {
+    c.score = Math.min(c.rrf + c.meta, 1);
+  }
 
   const seen = new Set();
   const deduped = [];
-  for (const result of ranked) {
+  for (const result of rrfSorted) {
     const key = `${result.document.document_id}:${result.chunk.paragraph || result.chunk.pdf_page || result.chunk.chunk_number}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -179,12 +153,14 @@ export function searchCorpus({ query, filters = {}, store, limit = 15 }) {
     if (deduped.length >= limit) break;
   }
 
-  if (!deduped.length) {
-    const expanded = expandQuery(cleanedQuery, deduped);
+  const reranked = rerankResults(cleanedQuery, deduped);
+
+  if (!reranked.length) {
+    const expanded = expandQuery(cleanedQuery, []);
     if (expanded !== cleanedQuery) {
       return searchCorpus({ query: expanded, filters, store, limit });
     }
   }
 
-  return { queryMetadata, results: deduped };
+  return { queryMetadata, results: reranked };
 }

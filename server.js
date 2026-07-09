@@ -7,7 +7,7 @@ import { buildCorpusStore } from "./src/corpusStore.js";
 import { answerLegalQuery } from "./src/ragPipeline.js";
 import { createCache } from "./src/cache.js";
 import { ingestDocument } from "./src/ingest.js";
-import { getEvents, getEventSummary, getQueryAudit, getHallucinationSummary, recordQueryAudit } from "./src/analytics.js";
+import { getEvents, getEventSummary, getQueryAudit, getHallucinationSummary, recordQueryAudit, recordLatency, getLatencySummary, recordFeedback, getFeedbackSummary } from "./src/analytics.js";
 import { recordQuery, recordProductClick, recordSourceView, recordMemoExport, addLead, getLeads, getTopPracticeAreas, getUserProfile, getCrmSummary } from "./src/crm.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -148,6 +148,7 @@ async function handleApi(req, res) {
   }
 
   if (req.method === "POST" && url.pathname === "/api/chat") {
+    const startTime = Date.now();
     const body = await readBody(req);
     const role = body.role || user.role;
     const tier = body.tier || user.tier;
@@ -160,6 +161,8 @@ async function handleApi(req, res) {
       userTier: tier,
       userId: user.userId
     });
+    const duration = Date.now() - startTime;
+    recordLatency("chat", duration);
     recordQuery(user.userId, body.query || "", result.query_intent, result.related_documents?.length || 0, result.status === "answered");
     recordQueryAudit({
       query: body.query,
@@ -212,10 +215,12 @@ async function handleApi(req, res) {
   }
 
   if (req.method === "GET" && url.pathname === "/api/source") {
+    const startTime = Date.now();
     const documentId = url.searchParams.get("document_id");
     const source = sourcePayload(documentId);
     if (!source) return sendJson(res, 404, { error: "Source document not found." });
     recordSourceView(user.userId, documentId);
+    recordLatency("source_view", Date.now() - startTime);
     return sendJson(res, 200, source);
   }
 
@@ -232,6 +237,27 @@ async function handleApi(req, res) {
       summary: getHallucinationSummary(),
       recent: getQueryAudit(limit)
     });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/feedback") {
+    const body = await readBody(req);
+    recordFeedback({
+      userId: user.userId,
+      query: body.query,
+      rating: body.rating,
+      comments: body.comments,
+      metadata: body.metadata
+    });
+    return sendJson(res, 201, { ok: true });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/feedback") {
+    return sendJson(res, 200, { summary: getFeedbackSummary() });
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/latency") {
+    const op = url.searchParams.get("operation") || undefined;
+    return sendJson(res, 200, { [op || "all"]: getLatencySummary(op) });
   }
 
   if (req.method === "GET" && url.pathname === "/api/architecture") {
