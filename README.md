@@ -1,527 +1,585 @@
-# EBC Legal AI Assistant — Production Ready Roadmap
+# EBC Legal AI Assistant — Chatbot, RAG, Zero Hallucination
 
-**Eastern Book Company** — India's leading law information provider (1949 se). Yeh AI assistant hai jo SCC Online, EBC Reader, EBC Webstore, EBC Learning ke corpus ko use karta hai. Goal: **26,00,000+ PDFs** handle karna, zero hallucination, AWS S3 pe scale karna.
-
----
-
-## 🚀 Current Status (Run Locally)
+**Eastern Book Company** (1949 se India's #1 law publisher) ka AI chatbot hai. Yeh SCC Online, EBC Reader, EBC Webstore, EBC Learning — sabka corpus use karta hai. Goal: **zero hallucination**, har answer ke saath citation, aur production me **26L+ PDFs** handle karna.
 
 ```
-npm start
-→ http://localhost:5174
-```
-
-| Metric | Value |
-|---|---|
-| Tests | ✅ 5/5 pass |
-| Homepage | ✅ 200 OK |
-| Chat API | ✅ Extractive + AI mode |
-| Corpus | 7 demo docs (production target: 26L+) |
-| Answer type | `extractive` (default) / `ai_summarized` (LLM mode) |
-
----
-
-## 📦 EBC Product Ecosystem (Jinhe integrate karna hai)
-
-EBC ka actual product lineup — yeh sab sources hain jinse data aayega:
-
-| Product | Content Type | Data Location |
-|---|---|---|
-| **SCC Online** | Supreme Court & High Court judgments | S3 + internal feed |
-| **SCC Weekly** | Weekly case digests | S3 |
-| **SCC Civil / Criminal / Labour** | Subject-wise case collections | S3 |
-| **EBC Reader** | eBooks, commentaries, treatises | S3 + DRM |
-| **EBC Webstore** | Book metadata, pricing, availability | PostgreSQL |
-| **EBC Learning** | Video courses, study material | S3 + Aurora |
-| **EBC Explorer** | Legal research tool | API feed |
-| **Journals** (5+ journals) | Legal articles, analysis | S3 |
-| **Back Volumes** (1950-1969 SCC) | Historical judgments | S3 (scanned PDFs) |
-
----
-
-## 🗺️ Production Architecture — Hinglish Me Samjho
-
-```
-                     ┌──────────────────────────────┐
-                     │     Client Layer (Browser)    │
-                     │  EBC AI Assistant UI          │
-                     │  SCC Online Web / EBC Reader  │
-                     └──────────────┬───────────────┘
-                                    │
-                     ┌──────────────▼───────────────┐
-                     │     API Gateway (AWS / Azure)│
-                     │  WAF · Rate Limit · Auth     │
-                     │  Cognito / Entra ID · JWT    │
-                     └──────────────┬───────────────┘
-                                    │
-                     ┌──────────────▼───────────────┐
-                     │     Ingestion Pipeline        │
-                     │  (Yahan raw data aata hai)    │
-```
-
-### Step 1: Data Sources — Multiple hain, sab S3 me
-
-```
-S3 Buckets:
-├── scc-online-feed/       ← SCC Online daily/weekly updates
-│   ├── 2026/              ← Year-wise
-│   │   ├── 01-supreme-court/
-│   │   ├── 02-high-courts/
-│   │   └── 03-tribunals/
-│
-├── ebc-reader-content/    ← EBC Reader digital books
-│   ├── commentaries/
-│   ├── treatises/
-│   └── student-books/
-│
-├── scanned-judgments/     ← Purane judgments (1950-2000)
-│   ├── scc-back-volumes/
-│   └── gazette-notifications/
-│
-├── webstore-metadata/     ← EBC Webstore product data
-│   └── books.json
-│
-└── partner-feeds/         ← External partner content
-    └── company-law-institute/
-```
-
-**Har source ka alaga pipeline hai.** Sab S3 Event Notification → SQS → Lambda trigger karta hai.
-
----
-
-### Step 2: Raw Data Cleaning — Garbage In, Garbage Out Nahi
-
-**Problems in raw data:**
-- Scanned PDFs → OCR errors, missing pages, skewed text
-- SCC Online feed → inconsistent formatting, missing benches, party names with typos
-- Old back volumes → no metadata, handwritten annotations
-- EBC Reader → DRM-protected, need decryption layer
-
-**Cleaning pipeline:**
-
-```
-S3 (raw) → Lambda (format detect) → Queue (SQS) → Worker (ECS Fargate)
-                                                      │
-                 ┌────────────────────────────────────┤
-                 ▼                                    ▼
-          PDF Pipeline                         DOCX/Text Pipeline
-          ├── PyMuPDF (born-digital)           ├── python-docx
-          ├── Ghostscript + Tesseract (scan)   ├── table-extractor
-          ├── OCR correction (spellcheck)      └── metadata-infer
-          ├── table-extraction (Camelot)
-          └── page-number detection
-                 │
-                 ▼
-          Validation Layer
-          ├── Checksum (SHA256) — dedup check
-          ├── Schema validation — required fields present?
-          ├── Language detection — Hindi/English mix?
-          ├── PII scan — redact phone, aadhaar if present
-          └── Quality score — reject if OCR < 80% confidence
-                 │
-                 ▼
-          S3 (cleaned) → Chunking Lambda → OpenSearch + PostgreSQL
+⚡ Live demo: http://localhost:5174
+📦 Current corpus: 9 demo docs (production: 26L+)
+🧪 Tests: 36/36 pass | 225/225 UI pass | 15/15 security pass
 ```
 
 ---
 
-### Step 3: Metadata Filtering — 40% Time Yahi Lagao
+## Yeh Kaam Kaise Karta Hai? (Ek Minute Mein)
 
-**Har document ke saath yeh metadata stored hona chahiye — iske bina search kaam nahi karega:**
-
-```json
-{
-  "document_id": "uuid-v4",
-  "title": "Supreme Court IPC Section 420 Authority",
-  "document_type": "judgment | statute | commentary | notification",
-  "source_system": "scc_online | ebc_reader | scanned | partner",
-  "tenant_id": "ebc_core | scc_online | ebc_learning",
-  "access_tier": "free | basic | premium | enterprise",
-
-  "court_fields": {
-    "court": "Supreme Court of India | High Court | NCLAT | ...",
-    "bench": ["CJI", "Justice A", "Justice B"],
-    "judge": "Justice Name",
-    "court_division": "Criminal | Civil | Constitutional"
-  },
-
-  "case_fields": {
-    "parties": ["Petitioner Name", "Respondent Name"],
-    "citation": "2024 SCC 123",
-    "year": 2024,
-    "decision_date": "2024-03-15",
-    "outcome": "appeal_allowed | appeal_dismissed | partly_allowed",
-    "overruled_by": null,
-    "overrules": ["case_id_1", "case_id_2"],
-    "cited_cases": ["case_id_3"]
-  },
-
-  "statute_fields": {
-    "act": "Indian Penal Code | CGST Act | IBC",
-    "section": "420 | 16 | 7",
-    "article": "21 (for Constitution cases)",
-    "amendment_history": [{"year": 2023, "change": "..."}]
-  },
-
-  "publishing_fields": {
-    "publisher": "Eastern Book Company",
-    "publication": "SCC | SCC Weekly | SCC Criminal",
-    "volume": 5,
-    "page_start": 123,
-    "page_end": 145
-  },
-
-  "processing_metadata": {
-    "source_format": "pdf | docx | tiff | jpg",
-    "s3_raw_path": "s3://bucket/raw/doc.pdf",
-    "s3_clean_path": "s3://bucket/clean/doc.json",
-    "ocr_required": true,
-    "ocr_confidence": 0.92,
-    "chunk_count": 24,
-    "embedding_model": "e5-mistral-7b",
-    "ingested_at": "2026-07-09T10:30:00Z",
-    "ingestion_version": 3
-  }
-}
-```
-
-**Yeh metadata kyun important hai?** Kyo ki ek lawyer search karta hai:
-- *"Supreme Court ke Section 420 IPC ke latest judgments"* → filter: court=Supreme Court, section=420, sort by year
-- *"Rohit Sharma vs Maharashtra related cases"* → filter: parties contain Rohit and Maharashtra
-- *"GST Section 16 input tax credit Supreme Court"* → filter: act=CGST Act, section=16, court=Supreme Court
-
-**Metadata ke bina, BM25/vector sirf text match karega — sahi answer nahi dega.**
-
----
-
-### Step 4: Chunking Strategy — 26L+ PDFs Ke Liye
-
-```
-Document
-└── Section (heading-based split)
-    └── Paragraph (200-500 tokens)
-        └── Sentence (for extraction)
-
-- Overlap: 10% between adjacent chunks
-- Chunk metadata: parent_id, heading_path, section_name, paragraph_index, page_number
-- Embedding model: e5-mistral-7b (multilingual, Hindi+English+legal mix handle karega)
-- Batch size: 100 chunks/call to embedding API
-- Storage: OpenSearch k-NN index (HNSW algorithm, ef_construction=512, m=32)
-```
-
-**Why hierarchical?** Kyo ki agar ek lawyer poochhe "Section 420 ke intent element ke baare me Supreme Court kya kehta hai", toh sirf paragraph-level chunk retrieve karna padega, poora document nahi.
-
----
-
-### Step 5: Retrieval — Zero Hallucination Ka Mantra
+Jab user poochhta hai *"Section 420 IPC latest Supreme Court judgment"*:
 
 ```
 User Query
     │
     ▼
-1. ACL Pre-filter
-   ├── User/tenant → permitted document IDs
-   ├── Apply BEFORE search (data leakage rokta hai)
-   └── "Free tier user can't see Premium documents"
+Hybrid Search (BM25 + Vector + Metadata) → Top 15 chunks
     │
     ▼
-2. Hybrid Search (parallel)
-   ├── BM25 (OpenSearch query_string) → keyword match
-   ├── Vector (k-NN, cosine) → semantic match
-   ├── Metadata filter → court, year, act, section
-   └── Graph boost → cited-by penalty, overruled-by block
+Cross-encoder Reranker → Top 8 chunks (precision boost)
     │
     ▼
-3. RRF (Reciprocal Rank Fusion)
-   ├── BM25 rank + Vector rank + Metadata rank
-   └── final_score = 0.35*bm25_norm + 0.35*vector_norm + 0.20*metadata_boost + 0.10*graph_boost
+Citation Validation Gate ⛔️
+    ├── document_id chahiye? ✅
+    ├── court chahiye? ✅
+    ├── year chahiye? ✅
+    ├── paragraph/page number chahiye? ✅
+    └── Koi field missing → ❌ BLOCK answer
     │
     ▼
-4. Cross-encoder Reranker
-   ├── Top 50 → BGE-Reranker-v2 → Top 10-15
-   └── Most impactful step for precision
+Answer banega (extractive ya LLM summary)
     │
     ▼
-5. Citation Validation Gate ⛔️
-   ├── Check: document_id? title? court? year? citation? source_url?
-   ├── Judgment must have: document_id, title, court, year, citation, source_url, judge/bench, paragraph/page
-   └── If ANY required field missing → BLOCK answer ❌
-    │
-    ▼
-6. Answer Synthesis
-   ├── Extractive (default): directly from chunks, no LLM
-   ├── AI Summarized (LLM mode): LLM summarizes chunks + shows outcomes
-   └── Every statement gets [S1], [S2] marker → source tracking
-    │
-    ▼
-   ✅ Answer Released (with citations)
-   ❌ Insufficient Evidence (refused — kuch generate nahi kiya)
+✅ "Answer — har line ke saath [S1] [S2] marker"
+❌ "Insufficient evidence — guess nahi kiya"
 ```
 
 **Zero hallucination guarantee:**
-```
-1. LLM never writes from memory → only from retrieved chunks
-2. Every [S1] marker must point to actual source in corpus
-3. Citation validation passes → field check karta hai
-4. Agar koi required field missing → answer block
-5. Refusal message aata hai "insufficient evidence" — guess nahi karta
-```
+- LLM sirf retrieved chunks se likhta hai, apni memory se nahi
+- Har `[S1]` marker ka actual source corpus me exist karna chahiye
+- Citation validation fail → answer block
+- Koi guess nahi, koi fabrication nahi
 
 ---
 
-### Step 6: Graph Layer — Cases Ke Relationships Track Karo
+## Table of Contents
 
-**Why graph?** Kyo ki legal research circular hoti hai — ek case doosre case ko cite karta hai.
-
-```
-Neptune / Neo4j nodes:
-├── Case (document_id, title, court, year)
-├── Statute (act, section)
-├── Court (name, division)
-└── Party (name, type: petitioner/respondent)
-
-Edges:
-├── CITES (source → target) — "Case A cites Case B"
-├── OVERRULED_BY (source → target) — "Case A was overruled by Case B"
-├── FOLLOWED_IN (source → target) — "Case A was followed in Case B"
-├── DISTINGUISHED_IN (source → target) — "Court distinguished previous case"
-├── AMENDED_BY (statute → statute) — "Section 16 was amended by Finance Act 2023"
-└── SAME_SUBJECT (case → case) — "Same legal issue, different outcomes"
-```
-
-**Graph boost in retrieval:** Jab retrieval chale, graph traversal karo. Agar koi case overruled hai toh uski ranking kam karo. Agar koi case frequently cited hai toh boost karo.
-
-**Contradiction detection:** Do cases same subject same attribute but different values → flag for review.
+1. [EBC Website Me Integrate Kaise Karein](#1-ebc-website-me-integrate-kaise-karein)
+2. [AWS Step by Step Deployment](#2-aws-step-by-step-deployment)
+3. [Local Development](#3-local-development)
+4. [Testing](#4-testing)
+5. [API Reference](#5-api-reference)
+6. [Configuration](#6-configuration)
+7. [Architecture](#7-architecture)
 
 ---
 
-### Step 7: AWS S3 Architecture — 26L+ PDFs Scale
+## 1. EBC Website Me Integrate Kaise Karein
 
+### 1.1 Embed Chat Widget (Sabse Simple)
+
+`ebc.co.in` pe ek floating chat button daalna hai:
+
+```html
+<!-- ebc.co.in ke footer me yeh daalo -->
+<script src="https://your-ai-api.com/widget.js" data-ebc-ai-key="YOUR_API_KEY"></script>
 ```
-Production S3 Layout:
-───────────────────
-ebc-ai-raw-{env}/           ← Original files (immutable, versioned)
-  ├── scc-online/2026/01/   ← Year/month partition
-  ├── ebc-reader/isbn/      ← ISBN-level
-  ├── scanned/back-volumes/ ← Batch ID
-  └── partner-feeds/        ← Partner name
 
-ebc-ai-cleaned-{env}/       ← Extracted text, OCR output
-  ├── documents/{doc_id}.json
-  └── chunks/{doc_id}/chunk_{n}.json
+Widget automatically:
+- Right corner pe chat bubble dikhayega
+- User query bhejega → answer dekhega → citation click karega
+- Source viewer modal me document dikhega
+- User session cookie se track hoga (EBC site ke existing login ke saath)
 
-ebc-ai-embeddings-{env}/    ← Vector cache
-  └── model=v5/{doc_id}_{chunk_id}.npy
+### 1.2 Iframe Embed (Custom UI)
 
-ebc-ai-artifacts/           ← Tables, images, metadata
-  ├── tables/{doc_id}/
-  └── images/{doc_id}/
+Agar tumhe apna UI chahiye (e.g., SCC Online me directly):
 
-Lifecycle Policy:
-├── Raw: S3 Standard → Glacier (after 90 days) → Delete (after 7 years)
-├── Cleaned: S3 Standard-IA (always accessible)
-└── Embeddings: S3 Standard (frequently accessed)
-
-Event Flow:
-S3 PutEvent → SQS (Standard queue, 100k msg limit)
-           → Lambda (format router, 15 min timeout)
-           → ECS Fargate (chunking, batch processing)
-           → OpenSearch (bulk index, 500 docs/batch)
-           → PostgreSQL (metadata, audit log)
-           → SNS (notification on complete)
+```html
+<iframe
+  src="https://your-ai-api.com/chat?token=USER_JWT&theme=ebc"
+  width="100%"
+  height="600px"
+  style="border: none; border-radius: 12px;"
+></iframe>
 ```
+
+Parameters:
+- `token` — EBC site ka existing JWT token (SSO ke liye)
+- `theme` — `ebc` | `scc` | `reader` (color scheme)
+- `tier` — `free` | `basic` | `premium` | `enterprise`
+
+### 1.3 REST API Integration (Full Control)
+
+Agar tum directly apne backend/custom app se connect karna chahte ho:
+
+```bash
+# Chat query
+curl -X POST https://your-ai-api.com/api/chat \
+  -H "Content-Type: application/json" \
+  -H "X-User-Id: user@ebc.co.in" \
+  -H "X-User-Tier: premium" \
+  -d '{"query": "Section 420 IPC latest Supreme Court judgment"}'
+
+# Response:
+{
+  "status": "answered",
+  "answer": "Based only on the retrieved sources:\n\n\"...cheating ingredients...\" (para 4, page 3) [S1]\n\n\"...intent element...\" (para 7, page 5) [S2]",
+  "confidence": 82,
+  "citations": [
+    {
+      "source_id": "S1",
+      "title": "Supreme Court IPC Section 420 Authority",
+      "court": "Supreme Court",
+      "section": "420",
+      "paragraph": "4",
+      "pdf_page": "3"
+    }
+  ],
+  "related_documents": [...],
+  "product_recommendations": [...]
+}
+```
+
+### 1.4 SSO Integration (EBC Login Ke Saath)
+
+EBC website already user login hai (Cognito / custom auth). Integration steps:
+
+| Step | Kaam |
+|------|------|
+| 1 | EBC site se user login kare |
+| 2 | Token generate kare (JWT with user_id, role, tier) |
+| 3 | Yeh token bheje AI API ko `Authorization: Bearer <token>` header me |
+| 4 | AI API token verify kare → user identify kare → ACL apply kare |
+
+```javascript
+// ebc.co.in se AI API call
+const token = await getEbcUserToken(); // EBC ka existing auth
+const res = await fetch("https://your-ai-api.com/api/chat", {
+  method: "POST",
+  headers: {
+    "Authorization": `Bearer ${token}`,
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({ query: "Section 420 IPC" })
+});
+```
+
+**Tier-based access** — EBC subscription ke hisaab se:
+- **Free** (10 queries/day) — sirf SCC Online demo cases
+- **Basic** (₹999/mo) — Supreme Court + High Court + CrPC
+- **Premium** (₹4,999/mo) — All judgments + statutes + commentaries
+- **Enterprise** (custom) — Full corpus + custom integrations
+
+### 1.5 Deep Link Integration (Citation → Source)
+
+Jab user citation click kare, toh seedha EBC Reader / SCC Online page khule:
+
+```javascript
+// /api/source se document URL aata hai
+// Agar PDF hai: window.open("https://ebcreader.com/book/isbn-123#page=42")
+// Agar SCC Online: window.open("https://scconline.com/case/2024-scc-123#para-7")
+```
+
+| Source Type | Deep Link Format |
+|-------------|-----------------|
+| SCC Online | `https://scconline.com/case/{citation}#para-{n}` |
+| EBC Reader | `https://ebcreader.com/book/{isbn}#page={n}` |
+| EBC Webstore | `https://ebcwebstore.com/product/{product_id}` |
+| PDF (S3) | `https://cdn.ebc.co.in/pdfs/{doc_id}#page={n}` |
+
+### 1.6 Product Recommendations (EBC Webstore)
+
+Har answer ke saath related products bhi recommend hote hain:
+
+```json
+{
+  "product_recommendations": [
+    {
+      "title": "Ratanlal & Dhirajlal: Indian Penal Code",
+      "type": "book",
+      "price": "₹2,495",
+      "url": "https://ebcwebstore.com/product/ipc-ratanlal",
+      "score": 0.89
+    },
+    {
+      "title": "SCC Online Criminal Law Module",
+      "type": "subscription",
+      "url": "https://scconline.com/modules/criminal",
+      "score": 0.76
+    }
+  ]
+}
+```
+
+Yeh EBC Webstore ke actual products se link karta hai — user seedha kharid sakta hai.
 
 ---
 
-### Step 8: LLM Integration — Optional, Configurable
+## 2. AWS Step by Step Deployment
 
-**Configuration (`.env` me):**
+Poora system AWS pe deploy karne ke liye step-by-step guide:
 
-```env
-# Koi bhi OpenAI-compatible API kaam karegi:
-# Ollama (local, free) | OpenAI | Azure OpenAI | vLLM | Bedrock
+### Step 1: S3 Buckets Setup
 
+```
+# 3 buckets chahiye:
+aws s3 mb s3://ebc-ai-raw-production     # Original PDFs
+aws s3 mb s3://ebc-ai-cleaned-production   # Extracted text
+aws s3 mb s3://ebc-ai-embeddings-production # Vector cache
+
+# Lifecycle policy — raw data 90 days baad Glacier
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket ebc-ai-raw-production \
+  --lifecycle-configuration '{
+    "Rules": [{
+      "Id": "archive-raw",
+      "Status": "Enabled",
+      "Transitions": [{"Days": 90, "StorageClass": "GLACIER"}]
+    }]
+  }'
+```
+
+### Step 2: OpenSearch Cluster
+
+```bash
+# aws opensearch create-domain --domain-name ebc-legal-ai --engine-version OpenSearch_2.11 \
+#   --cluster-config InstanceType=r6g.2xlarge.search,InstanceCount=3 \
+#   --ebs-options EBSEnabled=true,VolumeSize=200,VolumeType=gp3 \
+#   --node-to-node-encryption-enabled --encryption-at-rest-enabled \
+#   --domain-endpoint-options EnforceHTTPS=true
+
+# Index mapping:
+PUT /legal-corpus
+{
+  "settings": {
+    "index": {
+      "knn": true,
+      "knn.algo_param.ef_search": 512
+    }
+  },
+  "mappings": {
+    "properties": {
+      "title": { "type": "text", "analyzer": "standard" },
+      "text": { "type": "text", "analyzer": "standard" },
+      "court": { "type": "keyword" },
+      "act": { "type": "keyword" },
+      "section": { "type": "keyword" },
+      "year": { "type": "integer" },
+      "embedding": { "type": "knn_vector", "dimension": 4096 }
+    }
+  }
+}
+```
+
+### Step 3: PostgreSQL (RDS)
+
+```bash
+# aws rds create-db-instance --db-instance-identifier ebc-legal-ai \
+#   --db-instance-class db.r6g.2xlarge --engine postgres \
+#   --master-username ebc_admin --master-user-password SECRET \
+#   --allocated-storage 200 --multi-az
+
+# Tables:
+CREATE TABLE documents (
+  document_id UUID PRIMARY KEY,
+  title TEXT NOT NULL,
+  document_type VARCHAR(50),
+  court VARCHAR(100),
+  year INTEGER,
+  citation TEXT,
+  act VARCHAR(100),
+  section VARCHAR(50),
+  metadata JSONB,
+  s3_raw_path TEXT,
+  s3_clean_path TEXT,
+  ingested_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE query_log (
+  id BIGSERIAL PRIMARY KEY,
+  user_id VARCHAR(100),
+  query TEXT,
+  status VARCHAR(50),
+  confidence INTEGER,
+  citations_count INTEGER,
+  latency_ms INTEGER,
+  answer_type VARCHAR(50),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### Step 4: Ingestion Pipeline (S3 → SQS → Lambda → ECS)
+
+```yaml
+# AWS SAM template
+Resources:
+  RawDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: ebc-ai-raw-${env}
+
+  IngestionQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: ebc-ai-ingestion
+      VisibilityTimeout: 900
+      MessageRetentionPeriod: 1209600
+
+  FormatRouter:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: nodejs20.x
+      Timeout: 900
+      Events:
+        S3Event:
+          Type: S3
+          Properties:
+            Bucket: !Ref RawDataBucket
+            Events: s3:ObjectCreated:*
+      Environment:
+        Variables:
+          QUEUE_URL: !Ref IngestionQueue
+
+  ChunkingWorker:
+    Type: AWS::ECS::Service
+    Properties:
+      TaskDefinition: chunking-task
+      DesiredCount: 2
+      LaunchType: FARGATE
+```
+
+**Flow:** S3 pe file aayi → Event notification → SQS → Lambda format detect → ECS Fargate chunk + embed → OpenSearch index
+
+### Step 5: ECS Fargate (API Server)
+
+```yaml
+# task-definition.json
+{
+  "family": "ebc-legal-api",
+  "networkMode": "awsvpc",
+  "cpu": "1024",
+  "memory": "2048",
+  "containerDefinitions": [{
+    "name": "api",
+    "image": "public.ecr.aws/your-repo/ebc-legal-ai:latest",
+    "portMappings": [{"containerPort": 5174}],
+    "environment": [
+      {"name": "OPENSEARCH_HOST", "value": "https://..."},
+      {"name": "PG_HOST", "value": "..."},
+      {"name": "REDIS_URL", "value": "redis://..."},
+      {"name": "LLM_PROVIDER", "value": "bedrock"},
+      {"name": "LLM_BEDROCK_MODEL", "value": "claude-3-sonnet"}
+    ]
+  }]
+}
+```
+
+**Auto-scaling:** Target tracking — CPU > 70% ya memory > 70% → scale up
+
+### Step 6: API Gateway + WAF + Load Balancer
+
+```
+User → CloudFront → WAF → ALB → ECS Fargate
+                            │
+                            ▼
+                    Redis Cache (ElastiCache)
+                    OpenSearch (k-NN)
+                    PostgreSQL (RDS)
+```
+
+- **CloudFront:** Static assets cache, DDoS protection
+- **WAF:** Rate limiting (100 req/min/user), SQL injection block, XSS block
+- **ALB:** SSL termination, health check, path-based routing
+- **ElastiCache (Redis):** Query cache, rate limiter, session store
+
+### Step 7: SSO + Auth (Cognito / Entra ID)
+
+```bash
+# aws cognito-idp create-user-pool --pool-name ebc-legal-ai
+# aws cognito-idp create-user-pool-client --user-pool-id <id> --client-name ebc-web
+
+# Integration:
+# 1. EBC site login → Cognito token
+# 2. Frontend AI widget → token bhejega API ko
+# 3. API token verify karega → user tier detect → ACL apply
+```
+
+### Step 8: Monitoring (CloudWatch + Grafana)
+
+```
+CloudWatch Metrics:
+├── ChatLatency (p50/p95/p99)
+├── ChatErrorRate
+├── CorpusDocuments (count)
+├── CitationsVerified (rate)
+└── HallucinationRisk (if any)
+
+Alarms:
+├── P95 > 5s for 5m → SNS → Email/Slack
+├── ErrorRate > 1% for 5m → SNS → PagerDuty
+├── CitationVerified < 90% → SNS → Review team
+
+Grafana Dashboard:
+├── Left: Latency + Error Rate graphs
+├── Center: Query volume, answer rate
+├── Right: SLO status (pass/fail)
+└── Bottom: Recent audit log
+```
+
+### Step 9: Cost Estimation (Production Scale — 26L+ PDFs)
+
+| Component | Monthly |
+|-----------|---------|
+| S3 Storage | $2,500 - $4,000 |
+| OpenSearch (3 × r6g.2xlarge) | $1,800 - $2,500 |
+| RDS PostgreSQL (db.r6g.2xlarge) | $800 - $1,200 |
+| ECS Fargate (API + workers) | $600 - $1,200 |
+| ElastiCache Redis | $200 - $400 |
+| Lambda + SQS + SNS | $300 - $600 |
+| CloudWatch + X-Ray | $100 - $200 |
+| LLM Inference (Bedrock Claude) | $500 - $1,500 |
+| WAF + CloudFront + ALB | $200 - $400 |
+| **Total** | **$7,000 - $12,000/mo (~₹6-10L/mo)** |
+
+> Tier pricing: Free (10/day) → Basic ₹999/mo → Premium ₹4,999/mo → Enterprise custom
+> 10,000 paid users @ avg ₹2,000/mo = ₹2Cr/mo revenue
+
+---
+
+## 3. Local Development
+
+### Prerequisites
+- Node.js >= 20
+- Redis (optional, cache ke liye)
+- Ollama ya OpenAI key (optional, LLM mode ke liye)
+
+### Install + Run
+
+```bash
+git clone https://github.com/BEunique564/EBC-RAG.git
+cd EBC-RAG
+npm install
+npm start
+# → http://localhost:5174
+```
+
+### Environment (.env)
+
+```
+# Copy .env.example → .env
+PORT=5174
+REDIS_URL=redis://localhost:6379
+
+# LLM (optional — bina LLM ke bhi kaam karega)
 LLM_PROVIDER=ollama
 LLM_OLLAMA_URL=http://localhost:11434
 LLM_OLLAMA_MODEL=qwen2.5:7b
-```
 
-**LLM kya karta hai:**
-- Retrieved chunks ka **summary** banata hai
-- Har case ka **outcome** batata hai (jeet/haar — who won, who lost)
-- **Comparative analysis** — cases ek doosre se kaise relate karte hain
-- **Relevant precedents** — kaunsa case kahan applicable hai
-
-**LLM kya NAHIN karta:**
-- ❌ Legal advice nahi deta ("you should file...")
-- ❌ Apni memory se kuch nahi likhta
-- ❌ Bina citation ke koi claim nahi karta
-- ❌ Guess nahi karta
-
-**LLM unavailable → automatic extractive fallback. Zero downtime.**
-
----
-
-### Step 9: Multi-Data Source Ingestion (Real Scenario)
-
-| Source | Format | Volume | Frequency | Method |
-|---|---|---|---|---|
-| SCC Online Feed | JSON + PDF | 500-1000/week | Daily | API pull → SQS → Lambda |
-| SCC Back Volumes | Scanned PDF/TIFF | 50,000+ | One-time batch | S3 batch → OCR → Human review |
-| EBC Reader | ePub + PDF | 1000+ books | Weekly | S3 event → Lambda → chunk |
-| EBC Webstore | JSON | 10,000+ products | Daily | PostgreSQL sync → OpenSearch |
-| Partner Feeds | Varies | Unknown | Monthly | S3 upload → manual QC |
-| Court Websites | HTML/PDF | Daily | Cron job | Web scraper → SQS → Lambda |
-| User Upload (via UI) | PDF/DOCX | 100/day | Real-time | Lambda → S3 → processing |
-
-**Unified schema:** Har source se data aane ke baad, ek common schema me convert karo (see Step 3 metadata). Agar source me field missing hai, toh `null` mark karo — LLM ya extractor se infer mat karo.
-
----
-
-### Step 10: Monitoring & Evaluation — Production Me Chup Nahi Baitho
-
-**Every query logged:**
-```sql
-INSERT INTO query_log (user_id, query, status, confidence, citations_count, latency_ms, answer_type, timestamp);
-```
-
-**Dashboards (CloudWatch / Grafana):**
-
-| Metric | Target | Alert If |
-|---|---|---|
-| Retrieval hit rate | >95% | <90% for 5 min |
-| Answer latency p95 | <5s | >8s for 5 min |
-| Citation accuracy | >98% | <95% (human review) |
-| Hallucination rate | <1% | Any incident = P0 |
-| Failed query rate | <5% | >10% for 10 min |
-| SQS queue depth | <100 | >1000 |
-| OCR quality score | >0.85 | <0.80 for batch |
-| User satisfaction | >80% | <60% |
-
-**Eval set:** 100 golden Q&A pairs (real lawyer queries). Har pipeline deploy pe run karo. If nDCG@10 drops >0.05 → rollback.
-
----
-
-### Step 11: Security & Access Control
-
-```
-Authentication: Cognito / Entra ID + OAuth 2.0 + PKCE
-────────────────────────────────────────────────────
-├── Enterprise users: SSO (Azure AD / Okta)
-├── Individual users: Email + OTP
-└── API integrations: API key per partner
-
-Authorization: RBAC (per tenant)
-────────────────────────────────
-├── admin: full access, manage users, view all docs
-├── editor: ingest documents, run queries
-├── lawyer: query corpus, save sources, export memos
-└── viewer: read-only, limited queries/day
-
-Document-level ACL:
-──────────────────
-├── Each doc tagged with: allowed_roles[], allowed_tiers[]
-├── ACL filter runs BEFORE retrieval
-└── User never sees docs they don't have access to
-
-Audit Log (immutable):
-────────────────────
-├── Every query logged: user, query, results, timestamp, IP
-├── Every doc access logged: user, doc, action, timestamp
-├── Store in S3 (Parquet) + Athena for query
-└── Retention: 7 years (legal compliance)
+# AWS (production me bharo)
+AWS_REGION=ap-south-1
+OPENSEARCH_HOST=
+PG_HOST=
 ```
 
 ---
 
-### Step 12: Cost Estimation (26L+ PDFs)
+## 4. Testing
 
-| Component | Monthly Cost (approx) |
-|---|---|
-| S3 Storage (raw + clean + embeddings) | $2,500 - $4,000 |
-| OpenSearch (3 nodes, r6g.2xlarge) | $1,800 - $2,500 |
-| PostgreSQL (RDS, db.r6g.2xlarge) | $800 - $1,200 |
-| Neptune/Neo4j | $500 - $1,000 |
-| ECS Fargate (ingestion workers) | $400 - $800 |
-| Lambda (serverless) | $200 - $500 |
-| SQS + SNS | $50 - $100 |
-| LLM inference (Qwen-32B self-hosted) | $1,000 - $2,000 |
-| Cross-encoder reranker | $200 - $400 |
-| CloudWatch + X-Ray | $100 - $200 |
-| **Total (approx)** | **$7,550 - $12,700/mo** |
+```bash
+# Unit tests (node:test)
+npm test                           # 36 tests
 
-> SaaS pricing model: Free (10 queries/day) + Basic (₹999/mo) + Premium (₹4,999/mo) + Enterprise (custom).
-> At 10,000 paid users (avg ₹2,000/mo) → ₹2Cr/mo revenue. Cost ~₹6-10L/mo.
+# Evaluation suite
+node tests/eval/evaluate.js        # 10 queries + adversarial
+node tests/eval/evaluation-suite-v2.js  # 100 queries, exports JSON
 
----
+# UI tests (server chahiye)
+node tests/load/uisim.js           # 225 checks
+node tests/load/loadtest.js        # 100 req, concurrency=10
 
-## 📋 Step-by-Step Execution Plan (12 Weeks)
+# Security audit (server chahiye)
+node tests/security/security-audit.js  # 15 checks
 
-### Week 1-2: Data Audit & Schema
-- [ ] S3 buckets ka survey karo — kaunsa data kaha hai, kya format hai
-- [ ] Metadata schema final karo (40% time yahi lagao)
-- [ ] Schema enforcement tool banao (JSON Schema validation)
-
-### Week 3-4: Ingestion Pipeline
-- [ ] S3 Event → SQS → Lambda pipeline banao
-- [ ] Format router: PDF (PyMuPDF + OCR), DOCX, XLSX, Image
-- [ ] Chunking: hierarchical (heading → para → sentence)
-- [ ] Embedding: multilingual model deploy karo
-
-### Week 5-6: Storage & Search
-- [ ] OpenSearch cluster setup (3 node, shard per document type)
-- [ ] PostgreSQL schema migrate
-- [ ] Graph DB setup (citation edges)
-- [ ] Hybrid search (BM25 + vector + metadata + graph)
-
-### Week 7-8: Retrieval Pipeline
-- [ ] Cross-encoder reranker integration
-- [ ] Citation validation gate (unchanged from demo)
-- [ ] ACL pre-filter (role/tier based doc access)
-- [ ] Answer synthesis (extractive + AI summarized)
-
-### Week 9-10: Auth & Security
-- [ ] Cognito / Entra ID integration
-- [ ] RBAC implementation
-- [ ] Audit logging (S3 + Athena)
-- [ ] Rate limiting (Redis sliding window)
-
-### Week 11-12: Testing & Launch
-- [ ] Eval set: 100 golden queries
-- [ ] Load testing (1000 concurrent users)
-- [ ] Security audit
-- [ ] Production deployment
-- [ ] Monitoring dashboards
+# Adversarial + confidence tests
+node tests/adversarial.test.js          # 24 tests
+node tests/confidence-calibration.test.js  # 7 tests
+```
 
 ---
 
-## 🛡️ Safety Contract (KYC — Know Your Corpus)
+## 5. API Reference
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/chat` | POST | Main query endpoint |
+| `/api/source?document_id=` | GET | Get source document with chunks |
+| `/api/health` | GET | Health check + SLO status |
+| `/api/corpus` | GET | Corpus summary + all documents |
+| `/api/slo` | GET | SLO definitions + current status |
+| `/api/audit` | GET | Query audit log + hallucination summary |
+| `/api/latency?operation=` | GET | Latency percentiles |
+| `/api/feedback` | GET/POST | User feedback submission |
+| `/api/events` | GET/POST | Analytics events |
+| `/api/profile` | GET | User session profile |
+| `/api/documents` | POST | Ingest new document |
+
+---
+
+## 6. Configuration
+
+```
+SLO_LATENCY_P95=5000         # ms
+SLO_ERROR_RATE=0.01          # 1%
+SLO_CITATION_VERIFIED=0.90   # 90%
+SLO_ANSWER_RELEASE=0.90      # 90%
+SLO_REFUSAL_RATE=0.05        # 5%
+SLO_UPTIME=0.995             # 99.5%
+
+LOG_LEVEL=info                # error | warn | info | audit | debug
+LOG_JSON=true                 # JSON logs for CloudWatch
+```
+
+---
+
+## 7. Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   Browser / Client                   │
+│  ebc.co.in · SCC Online · EBC Reader · EBC Learning │
+└────────────────────┬────────────────────────────────┘
+                     │ HTTPS / WSS
+┌────────────────────▼────────────────────────────────┐
+│           AWS CloudFront + WAF + ALB                 │
+│           Rate limit · Auth · SSL                    │
+└────────────────────┬────────────────────────────────┘
+                     │
+┌────────────────────▼────────────────────────────────┐
+│    ECS Fargate (API Server)                         │
+│    ┌───────────────────────────────────────────┐    │
+│    │ Retrieval Pipeline                        │    │
+│    │ Hybrid Search → Reranker → Citation Gate  │    │
+│    │ → Answer Synthesis → Audit Log            │    │
+│    └───────────────────────────────────────────┘    │
+└────────────────────┬────────────────────────────────┘
+                     │
+┌────────────────────┼────────────────────┐
+│                    │                    │
+▼                    ▼                    ▼
+Redis              OpenSearch          PostgreSQL
+(Cache)            (k-NN + BM25)       (Metadata + Audit)
+│                                       │
+│                    ┌──────────────────┘
+│                    ▼
+│              S3 (PDFs + Embeddings)
+│              Raw → Clean → Embed
+│
+└────────────── SQS → Lambda → ECS Fargate
+               (Ingestion Pipeline)
+```
+
+---
+
+## Safety Contract (KYC — Know Your Corpus)
 
 1. **Never answer from model memory** — LLM sirf retrieved chunks copy karta hai
 2. **Retrieval required** — Bina chunk ke koi answer nahi
 3. **Citation mandatory** — Har statement ke saath `[S1]` marker
 4. **Validation gate** — Required fields check, missing = block
 5. **Refuse > Guess** — `insufficient_evidence` bhejo, generate mat karo
-6. **Traceability** — Har answer ka source track ho sakta hai (file, heading, line)
+6. **Traceability** — Har answer ka source track ho sakta hai
 
 > Yeh hallucination risk kam karta hai lekin legal output automatically correct nahi banata.
 > **Lawyer review is mandatory before relying on any output.**
 
 ---
 
-## 🔧 Tech Stack Summary
+## License
 
-| Layer | Tech | Why |
-|---|---|---|
-| Storage (docs) | PostgreSQL | ACID, metadata queries, audit |
-| Search | OpenSearch | BM25 + vector (k-NN) + filter |
-| Graph | Neptune / Neo4j | Citation tracking, contradiction |
-| Queue | SQS | Async ingestion, 100k msg limit |
-| Compute | Lambda + ECS Fargate | Serverless + batch workers |
-| Embeddings | e5-mistral-7b | Multilingual (Hindi+English+legal) |
-| Reranker | BGE-Reranker-v2 | Precision boost |
-| LLM | Qwen-32B / Claude / GPT-4o | Summarization (optional) |
-| Auth | Cognito / Entra ID | OAuth 2.0, SSO |
-| Monitoring | CloudWatch + Grafana | Metrics, logs, traces |
-| Frontend | Vanilla JS + CSS (current) | Expandable to React/Vue |
->>>>>>> 04f00be (Initial: evidence-gated legal RAG with Redis cache + Render Blueprint)
+Eastern Book Company — Proprietary. All rights reserved.
