@@ -18,3 +18,5 @@ services:
     name: ebc-redis
     plan: free
     maxmemoryPolicy: allkeys-lru
+    ipAllowList:
+      - 0.0.0.0/0
