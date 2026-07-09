@@ -62,7 +62,49 @@ export function crossEncode(query, chunk, document) {
   if (actNamePattern && chunkText.includes(actNamePattern[1].toLowerCase())) legalScore += 0.2;
   legalScore = Math.min(legalScore, 1);
 
-  const score = (
+  /* Cross-domain penalty: when query names a specific act but chunk belongs to a different act */
+  let crossPenalty = 0;
+  const ACT_PATTERNS = [
+    { regex: /\bgst\b|\bgoods\s+and\s+services\s*tax\b/i, aliases: ["gst", "cgst", "goods and services tax"] },
+    { regex: /\bcgst\b|\bcentral\s+goods\s+and\s+services\b/i, aliases: ["cgst", "gst", "central goods and services tax"] },
+    { regex: /\bipc\b|\bindian\s+penal\s+code\b/i, aliases: ["ipc", "indian penal code"] },
+    { regex: /\bcrpc\b|\bcriminal\s+procedure\s+code\b/i, aliases: ["crpc", "code of criminal procedure"] },
+    { regex: /\bibc\b|\binsolvency\b|\bbankruptcy\s+code\b/i, aliases: ["ibc", "insolvency and bankruptcy code"] },
+    { regex: /\bconstitution\b/i, aliases: ["constitution of india"] },
+    { regex: /\bincome\s+tax\b|\bit\s+act\b/i, aliases: ["income tax act"] },
+    { regex: /\bcustoms\s+act\b/i, aliases: ["customs act"] }
+  ];
+  for (const { regex, aliases } of ACT_PATTERNS) {
+    if (regex.test(query)) {
+      const docAct = (document.act || chunk.act || "").toLowerCase();
+      if (docAct && !aliases.some(a => docAct.includes(a))) {
+        crossPenalty = 0.35;
+      }
+      break;
+    }
+  }
+  /* Court-topic mismatch: query has case name with known topic but chunk is from unrelated area */
+  const knownTopicIndicators = [
+    { words: ["gst", "vat", "tax", "input tax credit", "supply"], topic: "tax" },
+    { words: ["bail", "custody", "criminal", "cheating", "fraud", "420"], topic: "criminal" },
+    { words: ["privacy", "article 21", "personal liberty", "fundamental right"], topic: "constitutional" },
+    { words: ["insolvency", "ibc", "bankruptcy", "resolution", "liquidation"], topic: "insolvency" }
+  ];
+  for (const ti of knownTopicIndicators) {
+    const matchWord = ti.words.find(w => query.toLowerCase().includes(w));
+    if (matchWord) {
+      /* Check document-level topic first (more reliable), then chunk-level */
+      const docTopic = (document.topic || "").toLowerCase();
+      const chunkTopic = (chunk.topic || "").toLowerCase();
+      const bothTopics = `${docTopic} ${chunkTopic}`.trim();
+      if (bothTopics && !bothTopics.includes(ti.topic) && !bothTopics.includes(matchWord)) {
+        crossPenalty = Math.max(crossPenalty, 0.25);
+      }
+      break;
+    }
+  }
+
+  let score = (
     tokenExactScore * CROSS_ENCODER_WEIGHTS.token_exact +
     phraseScore * CROSS_ENCODER_WEIGHTS.phrase_exact +
     positionScore * CROSS_ENCODER_WEIGHTS.position_early +
@@ -70,6 +112,7 @@ export function crossEncode(query, chunk, document) {
     metaScore * CROSS_ENCODER_WEIGHTS.metadata +
     legalScore * CROSS_ENCODER_WEIGHTS.legal_terms
   );
+  score = Math.max(0, score - crossPenalty);
 
   return {
     score: Math.min(score, 1),
@@ -79,7 +122,8 @@ export function crossEncode(query, chunk, document) {
       position_early: positionScore,
       coverage: coverageScore,
       metadata: metaScore,
-      legal_terms: legalScore
+      legal_terms: legalScore,
+      cross_domain_penalty: crossPenalty
     }
   };
 }

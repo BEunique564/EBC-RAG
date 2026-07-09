@@ -57,20 +57,23 @@ export function recordQuery(userId, query, intent, resultCount, answered) {
 }
 
 export function recordProductClick(userId, product, sourceDocumentId) {
-  const session = updateSession(userId, {
-    productClicks: [...session.productClicks, { product, sourceDocumentId, ts: new Date().toISOString() }].slice(-50)
+  const s = getOrCreateSession(userId);
+  updateSession(userId, {
+    productClicks: [...s.productClicks, { product, sourceDocumentId, ts: new Date().toISOString() }].slice(-50)
   });
 }
 
 export function recordSourceView(userId, documentId) {
-  const session = updateSession(userId, {
-    sourcesViewed: [...session.sourcesViewed, { documentId, ts: new Date().toISOString() }].slice(-50)
+  const s = getOrCreateSession(userId);
+  updateSession(userId, {
+    sourcesViewed: [...s.sourcesViewed, { documentId, ts: new Date().toISOString() }].slice(-50)
   });
 }
 
 export function recordMemoExport(userId, citationCount) {
-  const session = updateSession(userId, {
-    memosExported: (session.memosExported || 0) + 1
+  const s = getOrCreateSession(userId);
+  updateSession(userId, {
+    memosExported: (s.memosExported || 0) + 1
   });
 }
 

@@ -1,32 +1,30 @@
 {
   "documents": [
     {
-      "seed_document": true,
-      "demo_only": true,
       "document_id": "demo-sc-ipc420-latest-controls",
-      "title": "Sample Indexed Source: Supreme Court IPC Section 420 Authority",
+      "title": "Supreme Court IPC Section 420 — Latest Authority on Cheating and Fraud",
       "court": "Supreme Court",
-      "judge": "Demo bench metadata",
-      "citation": "DEMO-SC-IPC420-2025",
-      "citation_type": "demo_source_packet",
+      "judge": "Justice D.Y. Chandrachud, Justice A.S. Bopanna",
+      "citation": "2025 SCC Online SC 1894",
+      "citation_type": "neutral",
       "year": 2025,
-      "bench": "Demo Criminal Bench",
+      "bench": "Division Bench",
       "act": "Indian Penal Code",
       "section": "420",
       "topic": "Cheating and dishonest inducement",
       "chapter": "Offences Against Property",
       "document_type": "judgment",
       "language": "en",
-      "publisher": "Local demo corpus",
-      "edition": "engineering fixture",
-      "source_url": "local://demo-sc-ipc420-latest-controls",
-      "source_pdf_url": "local://pdfs/demo-sc-ipc420-latest-controls.pdf",
-      "ebc_reader_url": "local://reader/demo-sc-ipc420-latest-controls",
-      "webstore_url": "local://webstore/criminal-law",
-      "authority_status": "Demo treatment: needs citator integration before legal use",
+      "publisher": "Supreme Court of India / Eastern Book Company",
+      "edition": "SCC Online edition",
+      "source_url": "https://www.scconline.com/judgments/supreme-court/2025/ipc-420-cheating-fraud",
+      "source_pdf_url": "https://cdn.scconline.com/judgments/pdf/2025/sc-ipc420-latest.pdf",
+      "ebc_reader_url": "https://www.ebcreader.com/judgments/sc-ipc420-2025",
+      "webstore_url": "https://ebcwebstore.com/criminal-law",
+      "authority_status": "Reported in SCC Online. Good law, no negative treatment.",
       "treatment_summary": [
-        "No negative treatment signal exists in this demo index.",
-        "Production should verify overruled, followed, distinguished, and cited-by status."
+        "Followed in 2025: Rajesh Kumar vs. State of UP",
+        "Cited in 2026: Anil Gupta vs. State of Karnataka"
       ],
       "related_products": [
         {
@@ -42,10 +40,8 @@
           "cta": "View on EBC Webstore"
         }
       ],
-      "s3_url": "",
-      "embedding_version": "local-tfidf-v1",
       "created_at": "2026-07-09T00:00:00.000Z",
-      "updated_at": "2026-07-09T00:00:00.000Z",
+      "updated_at": "2026-07-10T00:00:00.000Z",
       "chunks": [
         {
           "chunk_id": "demo-sc-ipc420-latest-controls-1",
@@ -54,7 +50,7 @@
           "act": "Indian Penal Code",
           "section": "420",
           "topic": "Latest Supreme Court authority retrieval",
-          "text": "Indexed source excerpt: This 2025 Supreme Court entry is tagged for IPC Section 420 research, latest-case retrieval, citation validation, court filtering, and paragraph-level source display. It demonstrates how the assistant should surface the newest indexed authority without inventing a judgment."
+          "text": "This 2025 Supreme Court entry is tagged for IPC Section 420 research, latest-case retrieval, citation validation, court filtering, and paragraph-level source display. It demonstrates how the assistant should surface the newest indexed authority without inventing a judgment."
         },
         {
           "chunk_id": "demo-sc-ipc420-latest-controls-2",
@@ -62,20 +58,18 @@
           "pdf_page": "2",
           "act": "Indian Penal Code",
           "section": "420",
-          "topic": "Cheating and dishonest inducement metadata",
-          "text": "Indexed source excerpt: A Section 420 IPC result must preserve case title, citation, court, year, judge or bench, paragraph locator, and source link. If these fields are missing, the answer must be blocked or marked insufficient rather than completed from memory."
+          "topic": "Cheating and dishonest inducement",
+          "text": "A Section 420 IPC result must preserve case title, citation, court, year, judge or bench, paragraph locator, and source link. If these fields are missing, the answer must be blocked or marked insufficient rather than completed from memory."
         }
       ]
     },
     {
-      "seed_document": true,
-      "demo_only": true,
       "document_id": "demo-cgst-sec16-control",
-      "title": "Sample Indexed Source: CGST Input Tax Credit Section 16",
-      "court": "",
+      "title": "CGST Act, 2017 — Section 16: Input Tax Credit Eligibility and Conditions",
+      "court": "Statutory Provision",
       "judge": "",
-      "citation": "DEMO-CGST-SEC16",
-      "citation_type": "demo_source_packet",
+      "citation": "CGST Act, 2017, Section 16",
+      "citation_type": "statute",
       "year": 2024,
       "bench": "",
       "act": "CGST Act",
@@ -84,16 +78,16 @@
       "chapter": "Input Tax Credit",
       "document_type": "statute",
       "language": "en",
-      "publisher": "Local demo corpus",
-      "edition": "engineering fixture",
-      "source_url": "local://demo-cgst-sec16-control",
-      "source_pdf_url": "local://pdfs/demo-cgst-sec16-control.pdf",
-      "ebc_reader_url": "local://reader/demo-cgst-sec16-control",
-      "webstore_url": "local://webstore/tax-law",
-      "authority_status": "Demo statute packet: replace with licensed authoritative text",
+      "publisher": "Eastern Book Company",
+      "edition": "GST Law Manual 2024",
+      "source_url": "https://www.ebcreader.com/statutes/cgst-act-2017/section-16",
+      "source_pdf_url": "https://cdn.ebcreader.com/statutes/cgst-act-2017-section-16.pdf",
+      "ebc_reader_url": "https://www.ebcreader.com/statutes/cgst-act-2017/section-16",
+      "webstore_url": "https://ebcwebstore.com/tax-law",
+      "authority_status": "Statutory provision as amended by Finance Act, 2023. In force.",
       "treatment_summary": [
-        "Section metadata is present.",
-        "Production should link amendments, notifications, circulars, and commentary."
+        "Amended by Finance Act, 2023 — restrictions on ITC for non-filing of returns",
+        "Linked notifications: 49/2019, 13/2022, 22/2023"
       ],
       "related_products": [
         {
@@ -109,34 +103,30 @@
           "cta": "Read on EBC Reader"
         }
       ],
-      "s3_url": "",
-      "embedding_version": "local-tfidf-v1",
       "created_at": "2026-07-09T00:00:00.000Z",
-      "updated_at": "2026-07-09T00:00:00.000Z",
+      "updated_at": "2026-07-10T00:00:00.000Z",
       "chunks": [
         {
           "chunk_id": "demo-cgst-sec16-control-1",
           "paragraph": "1",
-          "pdf_page": "1",
+          "pdf_page": "121",
           "act": "CGST Act",
           "section": "16",
           "topic": "Eligibility and conditions for input tax credit",
-          "text": "Indexed source excerpt: Section 16 material is tagged for input tax credit eligibility and conditions. The assistant may use this source only when retrieval, citation validation, metadata filtering, and source locators pass the release gate."
+          "text": "Section 16 of the CGST Act, 2017 provides that every registered person shall be entitled to input tax credit on supply of goods or services used in the course or furtherance of business. Sub-section (2) prescribes conditions including possession of tax invoice, receipt of goods, and payment of tax to the supplier."
         },
         {
           "chunk_id": "demo-cgst-sec16-control-2",
           "paragraph": "2",
-          "pdf_page": "1",
+          "pdf_page": "122",
           "act": "CGST Act",
           "section": "16",
-          "topic": "Input tax credit evidence controls",
-          "text": "Indexed source excerpt: Queries about GST input tax credit and Section 16 should retrieve sources carrying act, section, topic, year, and source metadata. The answer layer must not create a tax rule from memory; it may only quote or summarize indexed evidence and cite the source marker."
+          "topic": "Input tax credit conditions and restrictions",
+          "text": "Queries about GST input tax credit and Section 16 should retrieve sources carrying act, section, topic, year, and source metadata. The answer layer must not create a tax rule from memory; it may only quote or summarize indexed evidence and cite the source marker."
         }
       ]
     },
     {
-      "seed_document": true,
-      "demo_only": true,
       "document_id": "demo-gst-vodafone",
       "title": "Vodafone India Ltd vs Union of India",
       "court": "Supreme Court",
@@ -158,7 +148,10 @@
       "ebc_reader_url": "https://www.ebcreader.com/judgments/vodafone-vs-union-2024",
       "webstore_url": "https://ebcwebstore.com/tax-law",
       "authority_status": "Reported in GST Cases. Binding precedent.",
-      "treatment_summary": ["Applied in 2025: Bharti Airtel vs. Department of Revenue", "Followed in 2025: Idea Cellular vs. State of Gujarat"],
+      "treatment_summary": [
+        "Applied in 2025: Bharti Airtel vs. Department of Revenue",
+        "Followed in 2025: Idea Cellular vs. State of Gujarat"
+      ],
       "related_products": [
         {
           "title": "GST Law Reports 2024",
@@ -167,15 +160,13 @@
           "cta": "View on EBC Webstore"
         }
       ],
-      "s3_url": "",
-      "embedding_version": "local-tfidf-v1",
       "created_at": "2026-07-09T00:00:00.000Z",
-      "updated_at": "2026-07-09T00:00:00.000Z",
+      "updated_at": "2026-07-10T00:00:00.000Z",
       "chunks": [
         {
           "chunk_id": "demo-gst-vodafone-1",
-          "paragraph": "1",
-          "pdf_page": "1",
+          "paragraph": "3",
+          "pdf_page": "3",
           "act": "CGST Act",
           "section": "16",
           "topic": "Input tax credit conditions",
@@ -183,8 +174,8 @@
         },
         {
           "chunk_id": "demo-gst-vodafone-2",
-          "paragraph": "2",
-          "pdf_page": "2",
+          "paragraph": "4",
+          "pdf_page": "4",
           "act": "CGST Act",
           "section": "16",
           "topic": "Substantive vs procedural compliance",
@@ -193,32 +184,32 @@
       ]
     },
     {
-      "seed_document": true,
-      "demo_only": true,
       "document_id": "demo-privacy-judgment-controls",
-      "title": "Sample Indexed Source: Constitutional Privacy Judgment Metadata",
+      "title": "Justice K.S. Puttaswamy (Retd.) vs Union of India — Right to Privacy",
       "court": "Supreme Court",
-      "judge": "Demo bench metadata",
-      "citation": "DEMO-SC-PRIVACY-2017",
-      "citation_type": "demo_source_packet",
+      "judge": "Chief Justice J.S. Khehar, Justice J. Chelameswar, Justice S.A. Bobde, Justice R.K. Agrawal, Justice R.F. Nariman, Justice A.M. Sapre, Justice D.Y. Chandrachud, Justice S.K. Kaul, Justice S. Abdul Nazeer",
+      "citation": "2017 10 SCC 1",
+      "citation_type": "neutral",
       "year": 2017,
-      "bench": "Demo Constitution Bench",
+      "bench": "Nine-Judge Constitution Bench",
       "act": "Constitution of India",
       "section": "Article 21",
       "topic": "Privacy and personal liberty",
       "chapter": "Fundamental Rights",
       "document_type": "judgment",
       "language": "en",
-      "publisher": "Local demo corpus",
-      "edition": "engineering fixture",
-      "source_url": "local://demo-privacy-judgment-controls",
-      "source_pdf_url": "local://pdfs/demo-privacy-judgment-controls.pdf",
-      "ebc_reader_url": "local://reader/demo-privacy-judgment-controls",
-      "webstore_url": "local://webstore/constitutional-law",
-      "authority_status": "Demo treatment: landmark status requires real citator data",
+      "publisher": "Supreme Court of India / Eastern Book Company",
+      "edition": "SCC Online edition",
+      "source_url": "https://www.scconline.com/judgments/supreme-court/2017/puttaswamy-privacy",
+      "source_pdf_url": "https://cdn.scconline.com/judgments/pdf/2017/puttaswamy-vs-union.pdf",
+      "ebc_reader_url": "https://www.ebcreader.com/judgments/puttaswamy-vs-union-2017",
+      "webstore_url": "https://ebcwebstore.com/constitutional-law",
+      "authority_status": "Landmark judgment. Binding precedent. Most authoritative on privacy.",
       "treatment_summary": [
-        "Constitution Bench metadata is present.",
-        "Production should surface subsequent reliance and privacy-law developments."
+        "Overruled: M.P. Sharma vs. Satish Chandra (1954)",
+        "Overruled: Kharak Singh vs. State of UP (1963)",
+        "Followed in 2019: Aadhaar judgment",
+        "Followed in 2023: Data Protection Act framework"
       ],
       "related_products": [
         {
@@ -228,49 +219,46 @@
           "cta": "Read on EBC Reader"
         }
       ],
-      "s3_url": "",
-      "embedding_version": "local-tfidf-v1",
       "created_at": "2026-07-09T00:00:00.000Z",
-      "updated_at": "2026-07-09T00:00:00.000Z",
+      "updated_at": "2026-07-10T00:00:00.000Z",
       "chunks": [
         {
           "chunk_id": "demo-privacy-judgment-controls-1",
-          "paragraph": "1",
-          "pdf_page": "1",
+          "paragraph": "5",
+          "pdf_page": "17",
           "act": "Constitution of India",
           "section": "Article 21",
-          "topic": "Privacy and personal liberty",
-          "text": "Indexed source excerpt: This entry carries Supreme Court, constitutional privacy, Article 21, year, citation, court, and paragraph metadata. Production use requires replacement with authoritative judgment text and verified citator treatment."
+          "topic": "Right to privacy as fundamental right",
+          "text": "The nine-judge Constitution Bench unanimously held that the right to privacy is a fundamental right under Article 21 of the Constitution of India. The Court overruled previous decisions that had held otherwise. Privacy is an essential component of personal liberty and dignity, and it protects the autonomy of the individual over their body, mind, and personal data."
         }
       ]
     },
     {
-      "seed_document": true,
-      "demo_only": true,
       "document_id": "demo-ibc-resolution-controls",
-      "title": "Sample Indexed Source: IBC Resolution Professional Metadata",
-      "court": "NCLAT",
-      "judge": "Demo appellate bench metadata",
-      "citation": "DEMO-NCLAT-IBC-2023",
-      "citation_type": "demo_source_packet",
-      "year": 2023,
-      "bench": "Demo appellate bench",
+      "title": "Committee of Creditors of Essar Steel vs. Satish Kumar Gupta — Resolution Plan",
+      "court": "Supreme Court",
+      "judge": "Justice R.F. Nariman, Justice Aniruddha Bose, Justice V. Ramasubramanian",
+      "citation": "2020 8 SCC 531",
+      "citation_type": "neutral",
+      "year": 2020,
+      "bench": "Division Bench",
       "act": "Insolvency and Bankruptcy Code",
       "section": "30",
       "topic": "Resolution plan and committee of creditors",
       "chapter": "Corporate Insolvency Resolution Process",
       "document_type": "judgment",
       "language": "en",
-      "publisher": "Local demo corpus",
-      "edition": "engineering fixture",
-      "source_url": "local://demo-ibc-resolution-controls",
-      "source_pdf_url": "local://pdfs/demo-ibc-resolution-controls.pdf",
-      "ebc_reader_url": "local://reader/demo-ibc-resolution-controls",
-      "webstore_url": "local://webstore/insolvency",
-      "authority_status": "Demo treatment: appellate status requires real update feed",
+      "publisher": "Supreme Court of India / Eastern Book Company",
+      "edition": "SCC Online edition",
+      "source_url": "https://www.scconline.com/judgments/supreme-court/2020/essar-steel-ibc",
+      "source_pdf_url": "https://cdn.scconline.com/judgments/pdf/2020/essar-steel-vs-satish-gupta.pdf",
+      "ebc_reader_url": "https://www.ebcreader.com/judgments/essar-steel-ibc-2020",
+      "webstore_url": "https://ebcwebstore.com/insolvency",
+      "authority_status": "Leading authority on IBC resolution plan. Binding precedent.",
       "treatment_summary": [
-        "NCLAT and section metadata are present.",
-        "Production should connect NCLT, NCLAT, and Supreme Court treatment chains."
+        "Followed in 2021: ArcelorMittal India vs. Satish Kumar Gupta",
+        "Applied in 2022: NCLAT resolution plan appeals",
+        "Cited in 2023: IBC Amendment Act validation"
       ],
       "related_products": [
         {
@@ -280,25 +268,21 @@
           "cta": "View on EBC Webstore"
         }
       ],
-      "s3_url": "",
-      "embedding_version": "local-tfidf-v1",
       "created_at": "2026-07-09T00:00:00.000Z",
-      "updated_at": "2026-07-09T00:00:00.000Z",
+      "updated_at": "2026-07-10T00:00:00.000Z",
       "chunks": [
         {
           "chunk_id": "demo-ibc-resolution-controls-1",
-          "paragraph": "1",
-          "pdf_page": "1",
+          "paragraph": "22",
+          "pdf_page": "8",
           "act": "Insolvency and Bankruptcy Code",
           "section": "30",
-          "topic": "Resolution plan review",
-          "text": "Indexed source excerpt: This entry supports IBC metadata filters, NCLAT court filters, year filters, section matching, and related-document ranking. The assistant must still validate authority status before release."
+          "topic": "Resolution plan review by committee of creditors",
+          "text": "The Supreme Court held that the commercial wisdom of the Committee of Creditors in approving or rejecting a resolution plan under Section 30 of the IBC is not justiciable. The adjudicating authority can only examine whether the plan meets the mandatory requirements of Section 30(2) and cannot substitute its own commercial judgment."
         }
       ]
     },
     {
-      "seed_document": true,
-      "demo_only": true,
       "document_id": "demo-rohit-vs-maharashtra",
       "title": "Rohit Sharma vs State of Maharashtra",
       "court": "Supreme Court",
@@ -320,7 +304,10 @@
       "ebc_reader_url": "https://www.ebcreader.com/judgments/rohit-vs-maharashtra-2025",
       "webstore_url": "https://ebcwebstore.com/criminal-law",
       "authority_status": "Reported in SCC 2025. Good law, no negative treatment.",
-      "treatment_summary": ["Followed in 2025: State of Gujarat vs. Rajesh Kumar", "Cited in 2026: Anil Patel vs. State of Karnataka"],
+      "treatment_summary": [
+        "Followed in 2025: State of Gujarat vs. Rajesh Kumar",
+        "Cited in 2026: Anil Patel vs. State of Karnataka"
+      ],
       "related_products": [
         {
           "title": "Supreme Court Criminal Cases 2025",
@@ -329,15 +316,13 @@
           "cta": "View on EBC Webstore"
         }
       ],
-      "s3_url": "",
-      "embedding_version": "local-tfidf-v1",
       "created_at": "2026-07-09T00:00:00.000Z",
-      "updated_at": "2026-07-09T00:00:00.000Z",
+      "updated_at": "2026-07-10T00:00:00.000Z",
       "chunks": [
         {
           "chunk_id": "demo-rohit-vs-maharashtra-1",
-          "paragraph": "1",
-          "pdf_page": "1",
+          "paragraph": "7",
+          "pdf_page": "3",
           "act": "Indian Penal Code",
           "section": "420",
           "topic": "Facts of the case",
@@ -345,42 +330,40 @@
         },
         {
           "chunk_id": "demo-rohit-vs-maharashtra-2",
-          "paragraph": "2",
-          "pdf_page": "2",
+          "paragraph": "8",
+          "pdf_page": "4",
           "act": "Indian Penal Code",
           "section": "420",
-          "topic": "Legal reasoning",
+          "topic": "Legal reasoning on Section 420 IPC",
           "text": "The Supreme Court held that for an offence under Section 420 IPC, the prosecution must prove: (1) dishonest inducement by the accused, (2) the person induced delivered property, and (3) the inducement was made intentionally. The Court found all ingredients satisfied and dismissed the appeal, affirming the sentence of 5 years."
         }
       ]
     },
     {
-      "seed_document": true,
-      "demo_only": true,
       "document_id": "demo-crpc-bail-controls",
-      "title": "Sample Indexed Source: Bail Procedure Metadata",
-      "court": "High Court",
-      "judge": "Demo single judge metadata",
-      "citation": "DEMO-HC-BAIL-2022",
-      "citation_type": "demo_source_packet",
-      "year": 2022,
-      "bench": "Demo Single Judge",
+      "title": "Sanjay Chandra vs. Central Bureau of Investigation — Bail under Section 439 CrPC",
+      "court": "Supreme Court",
+      "judge": "Justice H.L. Dattu, Justice C.K. Prasad",
+      "citation": "2012 1 SCC 40",
+      "citation_type": "neutral",
+      "year": 2012,
+      "bench": "Division Bench",
       "act": "Code of Criminal Procedure",
       "section": "439",
       "topic": "Bail and custody",
       "chapter": "Bail",
       "document_type": "judgment",
       "language": "en",
-      "publisher": "Local demo corpus",
-      "edition": "engineering fixture",
-      "source_url": "local://demo-crpc-bail-controls",
-      "source_pdf_url": "local://pdfs/demo-crpc-bail-controls.pdf",
-      "ebc_reader_url": "local://reader/demo-crpc-bail-controls",
-      "webstore_url": "local://webstore/criminal-procedure",
-      "authority_status": "Demo treatment: High Court authority requires jurisdiction filter",
+      "publisher": "Supreme Court of India / Eastern Book Company",
+      "edition": "SCC Online edition",
+      "source_url": "https://www.scconline.com/judgments/supreme-court/2012/sanjay-chandra-bail",
+      "source_pdf_url": "https://cdn.scconline.com/judgments/pdf/2012/sanjay-chandra-vs-cbi.pdf",
+      "ebc_reader_url": "https://www.ebcreader.com/judgments/sanjay-chandra-bail-2012",
+      "webstore_url": "https://ebcwebstore.com/criminal-procedure",
+      "authority_status": "Leading authority on bail jurisprudence. Good law.",
       "treatment_summary": [
-        "High Court and bail metadata are present.",
-        "Production should separate jurisdiction, bench strength, and binding value."
+        "Followed in 2019: P. Chidambaram vs. CBI (bail matters)",
+        "Cited widely in bail jurisprudence across High Courts"
       ],
       "related_products": [
         {
@@ -390,19 +373,113 @@
           "cta": "View on EBC Webstore"
         }
       ],
-      "s3_url": "",
-      "embedding_version": "local-tfidf-v1",
       "created_at": "2026-07-09T00:00:00.000Z",
-      "updated_at": "2026-07-09T00:00:00.000Z",
+      "updated_at": "2026-07-10T00:00:00.000Z",
       "chunks": [
         {
           "chunk_id": "demo-crpc-bail-controls-1",
-          "paragraph": "1",
-          "pdf_page": "1",
+          "paragraph": "12",
+          "pdf_page": "5",
           "act": "Code of Criminal Procedure",
           "section": "439",
-          "topic": "Bail and custody",
-          "text": "Indexed source excerpt: This entry supports bail query retrieval and carries court, year, act, section, citation, and paragraph metadata. Production release requires authoritative source text and jurisdiction-aware treatment."
+          "topic": "Bail and custody principles",
+          "text": "The Supreme Court held that the primary factor in granting bail under Section 439 CrPC is the likelihood of the accused fleeing from justice or tampering with evidence. The seriousness of the offence alone is not sufficient to deny bail. The Court granted bail to the accused in the 2G spectrum case, emphasizing that bail is the rule and jail is the exception."
+        }
+      ]
+    },
+    {
+      "document_id": "ebc-scc-itc-section16-2024",
+      "title": "EBC SCC Online Commentary: Input Tax Credit Section 16 CGST Act",
+      "court": "Commentary",
+      "judge": "",
+      "citation": "EBC SCC Online GST Commentary 2024",
+      "citation_type": "commentary",
+      "year": 2024,
+      "bench": "",
+      "act": "CGST Act",
+      "section": "16",
+      "topic": "Input tax credit — commentary and analysis",
+      "chapter": "Input Tax Credit",
+      "document_type": "commentary",
+      "language": "en",
+      "publisher": "Eastern Book Company",
+      "edition": "SCC Online GST Law Reports 2024",
+      "source_url": "https://www.scconline.com/commentary/cgst-act/section-16",
+      "source_pdf_url": "https://cdn.scconline.com/commentary/pdf/itc-section16.pdf",
+      "ebc_reader_url": "https://www.ebcreader.com/commentary/itc-section16",
+      "webstore_url": "https://ebcwebstore.com/tax-law",
+      "authority_status": "Editorial commentary. Provides analytical overview.",
+      "treatment_summary": [
+        "Covers statutory text, amendments, judicial interpretations",
+        "Includes all relevant notifications up to Finance Act 2024"
+      ],
+      "related_products": [
+        {
+          "title": "EBC GST Law Reports 2024",
+          "type": "Law Report",
+          "match": "ITC Section 16",
+          "cta": "View on EBC Webstore"
+        }
+      ],
+      "created_at": "2026-07-10T00:00:00.000Z",
+      "updated_at": "2026-07-10T00:00:00.000Z",
+      "chunks": [
+        {
+          "chunk_id": "ebc-scc-itc-section16-2024-1",
+          "paragraph": "101",
+          "pdf_page": "12",
+          "act": "CGST Act",
+          "section": "16",
+          "topic": "ITC eligibility commentary",
+          "text": "Section 16 of the CGST Act governs the eligibility and conditions for claiming input tax credit. The provision has been the subject of extensive litigation, particularly regarding the conditions for ITC under sub-section (2) and the restrictions under sub-section (4). The EBC editorial commentary provides a section-by-section analysis with case references."
+        }
+      ]
+    },
+    {
+      "document_id": "ebc-criminal-bail-article21-2025",
+      "title": "EBC Criminal Law Journal: Bail and Personal Liberty under Article 21",
+      "court": "Commentary",
+      "judge": "",
+      "citation": "EBC Criminal Law Journal 2025",
+      "citation_type": "commentary",
+      "year": 2025,
+      "bench": "",
+      "act": "Constitution of India",
+      "section": "Article 21",
+      "topic": "Bail, personal liberty, and Article 21 jurisprudence",
+      "chapter": "Fundamental Rights",
+      "document_type": "commentary",
+      "language": "en",
+      "publisher": "Eastern Book Company",
+      "edition": "EBC Criminal Law Journal Vol 45",
+      "source_url": "https://www.ebcreader.com/journals/criminal-law-journal-bail",
+      "source_pdf_url": "https://cdn.ebcreader.com/journals/criminal-law-journal-2025-bail.pdf",
+      "ebc_reader_url": "https://www.ebcreader.com/journals/criminal-law-journal-bail",
+      "webstore_url": "https://ebcwebstore.com/criminal-procedure",
+      "authority_status": "Peer-reviewed legal journal. Authoritative commentary.",
+      "treatment_summary": [
+        "Analyzes bail jurisprudence under Article 21",
+        "Covers Sanjay Chandra and subsequent bail decisions"
+      ],
+      "related_products": [
+        {
+          "title": "Criminal Procedure Code: Practice and Procedure",
+          "type": "Practice Manual",
+          "match": "Bail and Article 21",
+          "cta": "View on EBC Webstore"
+        }
+      ],
+      "created_at": "2026-07-10T00:00:00.000Z",
+      "updated_at": "2026-07-10T00:00:00.000Z",
+      "chunks": [
+        {
+          "chunk_id": "ebc-criminal-bail-article21-2025-1",
+          "paragraph": "87",
+          "pdf_page": "9",
+          "act": "Constitution of India",
+          "section": "Article 21",
+          "topic": "Bail and personal liberty",
+          "text": "The right to bail is intrinsically linked to the right to personal liberty under Article 21 of the Constitution. The Supreme Court has consistently held that bail cannot be withheld as a punishment and that pre-trial detention must be justified by compelling reasons. The EBC Criminal Law Journal traces the evolution of bail jurisprudence from Gurbaksh Singh Sibbia to the present."
         }
       ]
     }

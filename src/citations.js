@@ -18,11 +18,12 @@ export function verifyCitationMetadata(citation) {
   checks.judge_or_bench = Boolean(citation.judge || citation.bench);
   checks.paragraph = Boolean(citation.paragraph);
   checks.pdf_page = Boolean(citation.pdf_page);
+  const hasLocator = checks.paragraph || checks.pdf_page;
   return {
-    all_required: checks.document_id && checks.title && checks.court && checks.year && checks.citation,
+    all_required: checks.document_id && checks.title && checks.court && checks.year && checks.citation && hasLocator,
     has_pdf_link: checks.pdf_url,
     has_reader_link: checks.reader_url,
-    has_locator: checks.paragraph || checks.pdf_page,
+    has_locator: hasLocator,
     has_judge: checks.judge_or_bench,
     is_demo: !checks.source_url && !checks.pdf_url && !checks.reader_url,
     missing: Object.entries(checks).filter(([, v]) => !v).map(([k]) => k)
@@ -67,9 +68,9 @@ export function buildCitation(document, chunk, rank, score) {
 export function validateCitation(citation) {
   const required = REQUIRED_BY_TYPE[citation.document_type] || ["document_id", "title", "year", "source_url"];
   const missing = required.filter((field) => !citation[field]);
-  const needsLocator = citation.document_type === "judgment" || citation.document_type === "commentary";
 
-  if (needsLocator && !citation.paragraph && !citation.pdf_page) {
+  /* All citations require paragraph or pdf_page locator */
+  if (!citation.paragraph && !citation.pdf_page) {
     missing.push("paragraph_or_pdf_page");
   }
 

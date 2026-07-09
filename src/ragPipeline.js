@@ -396,22 +396,41 @@ export async function answerLegalQuery({ query, filters = {}, role = "lawyer", s
     return refusal(queryMetadata, results, "retrieved_evidence_failed_validation", filters, cleanedQuery, userTier);
   }
 
-  const { total: confidence, breakdown: confidenceBreakdown } = calculateConfidence(results, citations, validation);
+  /* Separate verified from unverified citations; use only verified for answer */
+  const verifiedCites = citations.filter(c => c.verified);
+  const unverifiedCites = citations.filter(c => !c.verified);
+  let activeCites = (verifiedCites.length ? verifiedCites : citations).map((c, i) => ({
+    ...c,
+    source_id: `S${i + 1}`,
+    pdf_deeplink: c.paragraph ? `${c.document_url}#page=${c.pdf_page || 1}` : c.document_url
+  }));
+
+  if (!verifiedCites.length) {
+    if (citations.length > 0) {
+      /* No verified citations at all — still answer but flag every citation */
+      const ucw = [`All ${citations.length} citations are unverified (missing metadata or using local demo sources). Verify each citation independently.`];
+      citations.filter(c => !c.verified).forEach(c => {
+        if (!c.paragraph && !c.pdf_page) ucw.push(`${c.source_id}: missing paragraph/page locator`);
+      });
+    }
+  }
+
+  const { total: confidence, breakdown: confidenceBreakdown } = calculateConfidence(results, activeCites, validation);
   const related = relatedDocuments(results);
   const intent = inferIntent(cleanedQuery, queryMetadata);
   const isAdvice = detectAdviceQuery(cleanedQuery);
 
   /* Try LLM summarization; fall back to extractive if unavailable */
   let answer, answerType;
-  const llmContent = buildLLMContent(cleanedQuery, citations);
+  const llmContent = buildLLMContent(cleanedQuery, activeCites);
   const llmResult = await generateWithLLM(SUMMARIZE_WITH_OUTCOMES, llmContent);
   if (llmResult) {
     answer = llmResult;
     answerType = "ai_summarized";
   } else {
     answer = intent === "case_comparison" && queryMetadata.parties
-      ? partyAnswer(citations, queryMetadata.parties)
-      : buildAnswer(cleanedQuery, citations);
+      ? partyAnswer(activeCites, queryMetadata.parties)
+      : buildAnswer(cleanedQuery, activeCites);
     answerType = "extractive";
   }
 
@@ -438,7 +457,7 @@ export async function answerLegalQuery({ query, filters = {}, role = "lawyer", s
 
   const confidenceLabel = finalAdjusted >= 90 ? "high" : finalAdjusted >= 70 ? "moderate" : "low";
 
-  const passageCites = citations.map(c => {
+  const passageCites = activeCites.map(c => {
     const loc = paragraphCitation(c);
     return { source_id: c.source_id, paragraph: c.paragraph, pdf_page: c.pdf_page, section: c.section, locator: loc.trim() };
   });
@@ -458,6 +477,10 @@ export async function answerLegalQuery({ query, filters = {}, role = "lawyer", s
     is_demo: !c.source_url || c.source_url.startsWith("local://")
   }));
 
+  const unverifiedWarning = unverifiedCites.length
+    ? `${unverifiedCites.length} citation(s) omitted from answer due to missing or unverifiable metadata (demo sources, missing court/year/citation).`
+    : null;
+
   const result = {
     status: grounded ? "answered" : "insufficient_evidence",
     answer: grounded ? answer : "The generated answer could not be sufficiently grounded in the retrieved sources. I cannot safely provide an answer.",
@@ -471,12 +494,15 @@ export async function answerLegalQuery({ query, filters = {}, role = "lawyer", s
     citation_fidelity: { total: fidelity.total, withMarkers: fidelity.withMarkers, fidelity: Math.round(fidelity.fidelity) },
     issues: extractIssues(cleanedQuery),
     evidence_gaps: unsupported.length ? [`${unsupported.length} sentence(s) lack direct source markers`] : [],
+    unverified_citations: unverifiedCites.length ? unverifiedCites : undefined,
+    unverified_citations_hidden: unverifiedCites.length > 0,
+    unverified_warning: unverifiedWarning,
     is_advice_query: isAdvice,
     query_intent: intent,
     user_role: role,
     user_tier: userTier,
     metadata_filters: queryMetadata,
-    citations,
+    citations: activeCites,
     citation_validation: validation,
     paragraph_citations: passageCites,
     reranker_signals: rerankerSignals,
@@ -484,7 +510,7 @@ export async function answerLegalQuery({ query, filters = {}, role = "lawyer", s
     related_documents: related,
     product_recommendations: rankProducts(related, cleanedQuery, userTier),
     practice_areas: detectAreas(cleanedQuery),
-    warnings: warningSet(cleanedQuery, citations, queryMetadata),
+    warnings: [...warningSet(cleanedQuery, activeCites, queryMetadata), unverifiedWarning].filter(Boolean),
     retrieval_trace: retrievalTrace({ queryMetadata, results, filters, released: true, reason: "answer_released" }),
     guardrails: [
       "Answer text is extracted from retrieved chunks and each statement carries a source marker.",

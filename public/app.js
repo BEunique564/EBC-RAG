@@ -1,5 +1,5 @@
 const state = {
-  health: null, lastResult: null, lastQuery: "", activeSource: null,
+  health: null, lastResult: null, lastQuery: "",
   workspace: [], userId: "", practiceAreas: [], crmSummary: null, profile: null,
   loading: false
 };
@@ -187,31 +187,44 @@ function answerMessageHtml(result) {
     const ref = `[${escapeHtml(c.source_id)}]`;
     const did = escapeHtml(c.document_id || '');
     const para = escapeHtml(c.paragraph || c.pdf_page || '');
-    const link = `<a href="#" class="citation-ref" data-document-id="${did}" data-source-id="${escapeHtml(c.source_id)}" data-paragraph="${para}">[${escapeHtml(c.source_id)}]</a>`;
+    const loc = c.paragraph ? `para ${escapeHtml(c.paragraph)}` : c.pdf_page ? `page ${escapeHtml(c.pdf_page)}` : '';
+    const link = `<a href="#source-${did}${para ? '@' + encodeURIComponent(para) : ''}" class="citation-ref" data-document-id="${did}" data-source-id="${escapeHtml(c.source_id)}" data-paragraph="${para}" title="View ${escapeHtml(c.title)} — ${loc}">[${escapeHtml(c.source_id)}]</a>`;
     answer = answer.replaceAll(ref, link);
   }
 
   /* Source pill bar – clickable badges that load the source with paragraph */
   const sourceBar = citations.length
-    ? `<div class="source-bar">${citations.map(c =>
-        `<button class="source-pill" data-document-id="${escapeHtml(c.document_id || '')}" data-source-id="${escapeHtml(c.source_id)}" data-paragraph="${escapeHtml(c.paragraph || c.pdf_page || '')}" title="${escapeHtml(c.title)}">${escapeHtml(c.source_id)} ${escapeHtml(c.citation || c.title || '').slice(0, 50)}</button>`
-      ).join('')}</div>`
+    ? `<div class="source-bar">${citations.map(c => {
+        const did = escapeHtml(c.document_id || '');
+        const para = escapeHtml(c.paragraph || c.pdf_page || '');
+        return `<a href="#source-${did}${para ? '@' + encodeURIComponent(para) : ''}" class="source-pill" data-document-id="${did}" data-source-id="${escapeHtml(c.source_id)}" data-paragraph="${para}" title="${escapeHtml(c.title)}">${escapeHtml(c.source_id)} ${escapeHtml(c.citation || c.title || '').slice(0, 50)}</a>`;
+      }).join('')}</div>`
     : '';
 
   /* Collapsible evidence section with paragraph locators and verification badge */
   const evidenceHtml = citations.length
     ? `<details class="evidence-details" ${citations.length > 2 ? '' : 'open'}>
-        <summary>View ${citations.length} cited source${citations.length > 1 ? 's' : ''}</summary>
+        <summary>View ${citations.length} verified source${citations.length > 1 ? 's' : ''}</summary>
         <div class="evidence-list">${citations.map(c => {
+          const did = escapeHtml(c.document_id || '');
+          const para = escapeHtml(c.paragraph || c.pdf_page || '');
           const loc = (c.locator || '') || (c.paragraph ? `para ${c.paragraph}` : c.pdf_page ? `page ${c.pdf_page}` : '');
-          const verified = c.verified !== false;
-          const verBadge = verified
-            ? `<span class="ver-badge verified" title="All required metadata present">Verified</span>`
-            : `<span class="ver-badge unverified" title="Missing citation metadata">Unverified</span>`;
           const deeplink = c.pdf_deeplink && !c.pdf_deeplink.startsWith('local://')
-            ? ` <a class="source-link" href="${escapeHtml(c.pdf_deeplink)}" target="_blank" rel="noreferrer" title="Open at exact page">🔗 Open</a>`
+            ? ` <a class="source-link" href="${escapeHtml(c.pdf_deeplink)}" target="_blank" rel="noreferrer" title="Open at exact page">Open at page</a>`
             : '';
-          return `<div class="evidence-item"><strong>${escapeHtml(c.source_id)}</strong> ${verBadge} ${escapeHtml(c.title)}${loc ? ` <span class="evidence-loc">${escapeHtml(loc)}</span>` : ''}${deeplink}<br><span class="snippet">${escapeHtml(c.snippet?.slice(0, 200))}…</span></div>`;
+          return `<div class="evidence-item"><strong>${escapeHtml(c.source_id)}</strong> ${escapeHtml(c.title)}${loc ? ` <span class="evidence-loc">${escapeHtml(loc)}</span>` : ''}${deeplink}<br><span class="snippet">${escapeHtml(c.snippet?.slice(0, 200))}…</span>
+            <a href="#source-${did}${para ? '@' + encodeURIComponent(para) : ''}" class="link-button" style="margin-top:4px;font-size:10px" data-document-id="${did}" data-paragraph="${para}">View in Source Viewer</a></div>`;
+        }).join('')}</div>
+       </details>`
+    : '';
+
+  /* Unverified sources — hidden behind toggle by default */
+  const unverifiedCiteBlock = result.unverified_citations?.length
+    ? `<details class="evidence-details unverified-evidence">
+        <summary>Show ${result.unverified_citations.length} unverified source${result.unverified_citations.length > 1 ? 's' : ''} (metadata missing or demo)</summary>
+        <div class="evidence-list">${result.unverified_citations.map(c => {
+          const missing = (c.missing || []).map(m => m.replace(/_/g, ' ')).join(', ');
+          return `<div class="evidence-item unverified"><strong>${escapeHtml(c.source_id)}</strong> <span class="ver-badge unverified">Unverified</span> ${escapeHtml(c.title)}<br><span class="snippet">Missing: ${escapeHtml(missing || 'metadata')}</span><br><span class="snippet">${escapeHtml(c.snippet?.slice(0, 150))}…</span></div>`;
         }).join('')}</div>
        </details>`
     : '';
@@ -230,21 +243,27 @@ function answerMessageHtml(result) {
   const typeLabel = result.answer_type === "ai_summarized"
     ? `<span class="meta-chip" style="background:#e0f2fe;color:#0369a1">AI Summarised</span>`
     : `<span class="meta-chip" style="background:#f3f4f6;color:var(--muted)">Direct Extract</span>`;
-  const w = (result.warnings || []).slice(0, 2).map(w => `<div class="warning-item">${escapeHtml(w)}</div>`).join("");
+  const w = (result.warnings || []).slice(0, 3).map(w => `<div class="warning-item">${escapeHtml(w)}</div>`).join("");
+  const unverifiedBanner = result.unverified_citations_hidden && result.unverified_citations?.length
+    ? `<div class="warning-item warning-amber">${result.unverified_citations.length} unverified citation(s) hidden by default. Expand "Show unverified sources" below to review.</div>`
+    : '';
   const areas = (result.practice_areas || []).map(a => practiceBadge(a)).join("");
   return `${trustHtml}
     ${fidelityHtml}
     ${gapHtml}
+    ${unverifiedBanner}
     <pre class="answer-text">${answer}</pre>
     ${sourceBar}
     ${evidenceHtml}
+    ${unverifiedCiteBlock}
     ${unsupportedWarn}
     <div class="message-meta">
       ${typeLabel}
       ${isAdviceLabel}
       <span class="meta-chip blue">${escapeHtml(result.status)}</span>
       <span class="meta-chip">${escapeHtml(result.confidence || 0)}% confidence</span>
-      <span class="meta-chip">${escapeHtml(result.citations?.length || 0)} citations</span>
+      <span class="meta-chip">${escapeHtml(result.citations?.length || 0)} verified citations</span>
+      ${result.unverified_citations?.length ? `<span class="meta-chip" style="background:#fef2f2;color:var(--danger)">${result.unverified_citations.length} unverified</span>` : ''}
       ${result.user_tier ? tierBadge(result.user_tier) : ''}
     </div>
     ${areas ? `<div class="message-meta">${areas}</div>` : ''}
@@ -278,35 +297,99 @@ function renderProducts(products) {
     : `<article class="product-card"><strong>No product match</strong><p class="snippet">Product recommendations appear when retrieved sources carry EBC commerce metadata. Upgrade your subscription for enhanced cross-sell coverage.</p></article>`;
 }
 
+/* Single source of truth for Source Viewer session */
+const sourceSession = {
+  documentId: null,
+  highlightPara: "",
+  source: null,
+
+  set(docId, para) {
+    this.documentId = docId;
+    this.highlightPara = para || "";
+    try { sessionStorage.setItem("ebc_active_source", JSON.stringify({ documentId: docId, highlightPara: this.highlightPara })); } catch {}
+    const hashPara = this.highlightPara ? `@${encodeURIComponent(this.highlightPara)}` : "";
+    const newHash = `#source-${encodeURIComponent(docId)}${hashPara}`;
+    if (location.hash !== newHash) {
+      history.replaceState(null, "", newHash);
+    }
+  },
+
+  restore() {
+    const match = location.hash.match(/^#source-(.+?)(?:@(.+))?$/);
+    if (match) {
+      this.documentId = decodeURIComponent(match[1]);
+      this.highlightPara = decodeURIComponent(match[2] || "");
+      return true;
+    }
+    try {
+      const raw = sessionStorage.getItem("ebc_active_source");
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (saved.documentId) {
+          this.documentId = saved.documentId;
+          this.highlightPara = saved.highlightPara || "";
+          return true;
+        }
+      }
+    } catch {}
+    return false;
+  },
+
+  clear() {
+    this.documentId = null;
+    this.highlightPara = "";
+    this.source = null;
+    try { sessionStorage.removeItem("ebc_active_source"); } catch {}
+  }
+};
+
 const sourceCache = new Map();
-let sourceLoadController = null;
+const sourceInflight = new Map(); /* prevent duplicate in-flight loads */
 
 async function loadSource(documentId, highlightPara) {
   if (!documentId) return;
 
+  sourceSession.set(documentId, highlightPara);
+
+  /* Serve from cache if fresh */
   if (sourceCache.has(documentId)) {
-    state.activeSource = sourceCache.get(documentId);
-    renderSource(state.activeSource, highlightPara);
+    sourceSession.source = sourceCache.get(documentId);
+    renderSource(sourceSession.source, highlightPara);
     return;
   }
 
-  if (sourceLoadController) sourceLoadController.abort();
-  sourceLoadController = new AbortController();
-  const timeoutId = setTimeout(() => sourceLoadController.abort(), 8000);
+  /* Prevent duplicate in-flight requests for the same documentId */
+  if (sourceInflight.has(documentId)) {
+    return sourceInflight.get(documentId);
+  }
+
+  const timeoutMs = 8000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   elements.sourceViewer.innerHTML = `<div class="empty-state"><div class="spinner" style="margin:0 auto 8px"></div><p class="muted">Loading source details…</p></div>`;
-  try {
-    const source = await fetchJ(`/api/source?document_id=${encodeURIComponent(documentId)}`, { signal: sourceLoadController.signal });
-    clearTimeout(timeoutId);
-    sourceCache.set(documentId, source);
-    state.activeSource = source;
-    trackClick("source_view", { document_id: documentId });
-    renderSource(source, highlightPara);
-  } catch (err) {
-    clearTimeout(timeoutId);
-    if (err.name === "AbortError") return;
-    elements.sourceViewer.innerHTML = `<div class="empty-state"><span class="empty-icon">⚠️</span><p class="muted">Could not load source details.</p><p class="snippet">${escapeHtml(err.message || "Unknown error")}</p><button type="button" class="link-button" data-action="retry-source" data-document-id="${escapeHtml(documentId)}">Retry</button></div>`;
-  }
+
+  const promise = (async () => {
+    try {
+      const source = await fetchJ(`/api/source?document_id=${encodeURIComponent(documentId)}`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      sourceCache.set(documentId, source);
+      sourceSession.source = source;
+      trackClick("source_view", { document_id: documentId });
+      renderSource(source, highlightPara);
+      return source;
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err.name === "AbortError") return null;
+      elements.sourceViewer.innerHTML = `<div class="empty-state"><span class="empty-icon">⚠️</span><p class="muted">Could not load source details.</p><p class="snippet">${escapeHtml(err.message || "Unknown error")}</p><button type="button" class="link-button" data-action="retry-source" data-document-id="${escapeHtml(documentId)}">Retry</button></div>`;
+      return null;
+    } finally {
+      sourceInflight.delete(documentId);
+    }
+  })();
+
+  sourceInflight.set(documentId, promise);
+  return promise;
 }
 
 function renderSource(source, highlightPara) {
@@ -315,14 +398,15 @@ function renderSource(source, highlightPara) {
     const pdfLink = c.pdf_page && source.source_pdf_url && !source.source_pdf_url.startsWith("local://")
       ? ` <a class="source-link" href="${escapeHtml(source.source_pdf_url)}#page=${escapeHtml(c.pdf_page)}" target="_blank" rel="noreferrer" title="Open PDF at page ${escapeHtml(c.pdf_page)}">📄 Page ${escapeHtml(c.pdf_page)}</a>`
       : '';
-    return `<p class="${isHighlighted ? 'source-highlighted' : ''}"><mark>Para ${escapeHtml(c.paragraph || "-")}</mark> ${escapeHtml(c.text)}${pdfLink}</p>`;
+    return `<p class="chunk-text ${isHighlighted ? 'source-highlighted' : ''}" data-paragraph="${escapeHtml(c.paragraph || '')}"><mark>Para ${escapeHtml(c.paragraph || "-")}${c.pdf_page ? ` | Page ${escapeHtml(c.pdf_page)}` : ''}</mark> ${escapeHtml(c.text)}${pdfLink}</p>`;
   }).join("");
   const treatments = (source.treatment_summary || []).map(i => `<li>${escapeHtml(i)}</li>`).join("");
   const tier = source.subscription_tier && source.subscription_tier !== "free" ? tierBadge(source.subscription_tier) : "";
   const pdfDeepLink = source.source_pdf_url && !source.source_pdf_url.startsWith("local://") ? source.source_pdf_url : null;
   const readerLink = source.ebc_reader_url && !source.ebc_reader_url.startsWith("local://") ? source.ebc_reader_url : null;
+  const anchorId = `source-${escapeHtml(source.document_id || '')}`;
 
-  elements.sourceViewer.innerHTML = `<h3>${escapeHtml(source.title)} ${tier}</h3>
+  elements.sourceViewer.innerHTML = `<div id="${anchorId}"><h3>${escapeHtml(source.title)} ${tier}</h3>
     <div class="metadata-line">${metadataChips(source)}</div>
     <p class="snippet"><strong>${escapeHtml(source.authority_status)}</strong></p>
     <ul class="authority-treatment">${treatments}</ul>
@@ -332,11 +416,20 @@ function renderSource(source, highlightPara) {
       ${source.webstore_url && !source.webstore_url.startsWith("local://") ? `<a class="link-button" href="${escapeHtml(source.webstore_url)}" target="_blank" rel="noreferrer">View on Webstore</a>` : ''}
       <button type="button" class="link-button" data-action="save-active-source">Save to workspace</button>
     </div>
-    <div class="source-viewer-text">${chunks || '<p class="muted">No chunk text available.</p>'}</div>`;
+    <div class="source-viewer-text" id="${anchorId}-text">${chunks || '<p class="muted">No chunk text available.</p>'}</div></div>`;
 
   if (highlightPara) {
     const el = elements.sourceViewer.querySelector('.source-highlighted');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (el) {
+      /* Ensure the source viewer card itself is visible on mobile */
+      const viewerCard = elements.sourceViewer.closest('.card');
+      if (viewerCard) viewerCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      /* Then scroll to the highlighted paragraph inside the viewer */
+      setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'center' }), 100);
+      /* Flash highlight animation */
+      el.classList.add('highlight-flash');
+      setTimeout(() => el.classList.remove('highlight-flash'), 2000);
+    }
   }
 }
 
@@ -451,7 +544,8 @@ function renderResult(result, query) {
   if (query) state.lastQuery = query;
   elements.statusMetric.textContent = result.status;
   elements.confidenceMetric.textContent = result.status === "answered" ? `${result.confidence}%` : "0%";
-  elements.citationMetric.textContent = `${result.citations.length}`;
+  const unvCount = result.unverified_citations?.length || 0;
+  elements.citationMetric.textContent = unvCount ? `${result.citations.length}+${unvCount}` : `${result.citations.length}`;
   elements.intentBadge.textContent = result.query_intent || "legal_research";
   elements.confidenceBadge.className = badgeClass(result);
   elements.confidenceBadge.textContent = result.status === "answered" ? `${result.confidence_label} confidence` : "Refused";
@@ -476,23 +570,27 @@ function renderResult(result, query) {
       </div>
     </article>`).join("")
     : `<article class="authority-card"><h3>No related authority</h3><p class="snippet">The indexed corpus did not produce a safe match. Try a different query or add more sources.</p></article>`;
-  elements.citationsList.innerHTML = result.citations.length
-    ? result.citations.map(c => {
+  const allCitations = [...(result.citations || []), ...(result.unverified_citations || []).map(c => ({ ...c, _unverified: true }))];
+  elements.citationsList.innerHTML = allCitations.length
+    ? allCitations.map(c => {
         const loc = (c.locator || '') || (c.paragraph ? `para ${c.paragraph}` : c.pdf_page ? `page ${c.pdf_page}` : '');
-        const verified = c.verified !== false;
-        const verBadge = verified
-          ? `<span class="ver-badge verified">Verified</span>`
-          : `<span class="ver-badge unverified">Unverified</span>`;
+        const verBadge = c._unverified
+          ? `<span class="ver-badge unverified">Unverified</span>`
+          : `<span class="ver-badge verified">Verified</span>`;
         const deeplink = c.pdf_deeplink && !c.pdf_deeplink.startsWith('local://')
           ? ` <a class="source-link" href="${escapeHtml(c.pdf_deeplink)}" target="_blank" rel="noreferrer">Open at page</a>`
           : '';
-        return `<article class="citation-card"><h3>${escapeHtml(c.source_id)} ${escapeHtml(c.title)} ${verBadge}</h3><div class="metadata-line">${metadataChips(c)}${loc ? `<span class="meta-chip">${escapeHtml(loc)}</span>` : ''}</div><p class="snippet">${escapeHtml(c.snippet)}</p>${deeplink}</article>`;
+        const extraMeta = c._unverified ? `<span class="meta-chip" style="background:#fef2f2;color:var(--danger)">HIDDEN FROM ANSWER</span>` : '';
+        return `<article class="citation-card ${c._unverified ? 'citation-unverified' : ''}"><h3>${escapeHtml(c.source_id)} ${escapeHtml(c.title)} ${verBadge}</h3><div class="metadata-line">${metadataChips(c)}${loc ? `<span class="meta-chip">${escapeHtml(loc)}</span>` : ''}${extraMeta}</div><p class="snippet">${escapeHtml(c.snippet)}</p>${deeplink}</article>`;
       }).join("")
     : `<article class="citation-card"><h3>No citations released</h3><p class="snippet">The answer was blocked because evidence was insufficient. The system refuses to generate unsupported legal statements.</p></article>`;
   renderProducts(result.product_recommendations || []);
   if (result.practice_areas?.length) state.practiceAreas = result.practice_areas;
   updateSaveExportButtons(true);
-  if (result.related_documents[0]) loadSource(result.related_documents[0].document_id).catch(() => {});
+  /* Auto-load first related doc only if no source is currently active */
+  if (result.related_documents[0] && !sourceSession.source && !sourceInflight.size) {
+    loadSource(result.related_documents[0].document_id).catch(() => {});
+  }
 }
 
 async function submitQuery(showUserMessage = true) {
@@ -609,22 +707,17 @@ elements.queryInput.addEventListener("keydown", (e) => {
   }
 });
 
-/* Clickable source refs inside chat messages — load source with paragraph highlight */
+/* Consolidated click handler: source refs, pills, and any [data-document-id] element */
 elements.chatMessages.addEventListener("click", async (e) => {
   const ref = e.target.closest("[data-document-id]");
   if (ref) {
     e.preventDefault();
+    const docId = ref.dataset.documentId;
     const para = ref.dataset.paragraph || ref.dataset.para || '';
-    await loadSource(ref.dataset.documentId, para);
-  }
-});
-
-/* Source pills inside chat messages */
-elements.chatMessages.addEventListener("click", async (e) => {
-  const pill = e.target.closest(".source-pill");
-  if (pill && pill.dataset.documentId) {
-    e.preventDefault();
-    await loadSource(pill.dataset.documentId, pill.dataset.paragraph || '');
+    if (docId) {
+      sourceSession.set(docId, para);
+      await loadSource(docId, para);
+    }
   }
 });
 
@@ -672,8 +765,8 @@ document.addEventListener("click", (e) => {
 elements.sourceViewer.addEventListener("click", (e) => {
   const t = e.target.closest("[data-action]");
   if (!t) return;
-  if (t.dataset.action === "save-active-source" && state.activeSource) {
-    saveWorkspaceItem({ id: `source:${state.activeSource.document_id}`, title: state.activeSource.title, detail: state.activeSource.citation || state.activeSource.authority_status });
+  if (t.dataset.action === "save-active-source" && sourceSession.source) {
+    saveWorkspaceItem({ id: `source:${sourceSession.source.document_id}`, title: sourceSession.source.title, detail: sourceSession.source.citation || sourceSession.source.authority_status });
   }
   if (t.dataset.action === "retry-source") {
     loadSource(t.dataset.documentId).catch(() => {});
@@ -710,3 +803,8 @@ await loadProfile();
 await loadCrm();
 renderWorkspace();
 updateSaveExportButtons(false);
+
+/* Restore Source Viewer session — single deterministic entry point (hash > sessionStorage) */
+if (sourceSession.restore()) {
+  loadSource(sourceSession.documentId, sourceSession.highlightPara).catch(() => {});
+}

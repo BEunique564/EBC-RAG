@@ -102,18 +102,42 @@ function setSessionCookie(res, userId) {
 async function serveStatic(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const requestedPath = url.pathname === "/" ? "/index.html" : url.pathname;
-  const normalizedPath = path.normalize(decodeURIComponent(requestedPath)).replace(/^(\.\.[/\\])+/, "");
+
+  /* Block path traversal and hidden files */
+  if (requestedPath.includes("..") || requestedPath.includes("%2e") || requestedPath.includes("\\")) {
+    res.writeHead(403); res.end("Forbidden"); return;
+  }
+
+  /* Only serve files from the public directory with allowed extensions */
+  const ext = path.extname(requestedPath).toLowerCase();
+  const allowedExts = new Set([".html", ".css", ".js", ".json", ".svg", ".png", ".ico", ".woff2", ".ttf"]);
+  if (!allowedExts.has(ext) && ext !== "") {
+    res.writeHead(404); res.end("Not Found"); return;
+  }
+
+  const normalizedPath = path.normalize(decodeURIComponent(requestedPath));
   const filePath = path.join(publicDir, normalizedPath);
-  if (!filePath.startsWith(publicDir)) { res.writeHead(403); res.end("Forbidden"); return; }
+
+  /* Ensure the resolved path is within publicDir */
+  if (!filePath.startsWith(publicDir)) {
+    res.writeHead(403); res.end("Forbidden"); return;
+  }
+
   try {
+    const stat = await import("node:fs/promises").then(fs => fs.stat(filePath));
+    if (!stat.isFile()) { res.writeHead(404); res.end("Not Found"); return; }
     const file = await readFile(filePath);
-    const ext = path.extname(filePath);
     res.writeHead(200, { "content-type": contentTypes.get(ext) || "application/octet-stream", "cache-control": "no-cache" });
     res.end(file);
   } catch {
-    const fallback = await readFile(path.join(publicDir, "index.html"));
-    res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
-    res.end(fallback);
+    /* Only fall back to index.html for actual HTML navigation, not for asset requests */
+    if (ext === ".html" || ext === "") {
+      const fallback = await readFile(path.join(publicDir, "index.html"));
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
+      res.end(fallback);
+    } else {
+      res.writeHead(404); res.end("Not Found");
+    }
   }
 }
 
@@ -141,7 +165,6 @@ async function handleApi(req, res) {
         authority_status: d.authority_status, treatment_summary: d.treatment_summary || [],
         related_products: d.related_products || [],
         ebc_reader_url: d.ebc_reader_url, webstore_url: d.webstore_url,
-        demo_only: Boolean(d.demo_only),
         subscription_tier: d.subscription_tier || "free"
       }))
     });
