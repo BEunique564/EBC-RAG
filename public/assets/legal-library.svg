@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 270" role="img" aria-label="Legal library shelves">
+  <rect width="560" height="270" fill="#fff9eb"/>
+  <rect x="38" y="45" width="484" height="20" rx="3" fill="#8a1b22"/>
+  <rect x="38" y="190" width="484" height="22" rx="3" fill="#8a1b22"/>
+  <rect x="62" y="67" width="34" height="120" rx="4" fill="#b41925"/>
+  <rect x="102" y="82" width="30" height="105" rx="4" fill="#c99a2e"/>
+  <rect x="139" y="57" width="42" height="130" rx="4" fill="#244d63"/>
+  <rect x="188" y="76" width="28" height="111" rx="4" fill="#5d6b32"/>
+  <rect x="222" y="62" width="52" height="125" rx="4" fill="#a51620"/>
+  <rect x="282" y="90" width="31" height="97" rx="4" fill="#d8b257"/>
+  <rect x="321" y="70" width="44" height="117" rx="4" fill="#2e6178"/>
+  <rect x="373" y="58" width="33" height="129" rx="4" fill="#7f1118"/>
+  <rect x="414" y="86" width="28" height="101" rx="4" fill="#c99a2e"/>
+  <rect x="450" y="66" width="46" height="121" rx="4" fill="#11715d"/>
+  <g fill="#fff7de" opacity=".92">
+    <rect x="72" y="86" width="14" height="72" rx="2"/>
+    <rect x="149" y="78" width="22" height="84" rx="2"/>
+    <rect x="237" y="84" width="23" height="76" rx="2"/>
+    <rect x="332" y="89" width="20" height="64" rx="2"/>
+    <rect x="462" y="85" width="22" height="75" rx="2"/>
+  </g>
+  <rect x="118" y="212" width="324" height="10" rx="5" fill="#d7b15b"/>
+  <rect x="158" y="230" width="244" height="13" rx="6.5" fill="#a51620"/>
+  <circle cx="280" cy="216" r="32" fill="#fffdf8" stroke="#c99a2e" stroke-width="6"/>
+  <path d="M265 216h30M280 201v30" stroke="#a51620" stroke-width="8" stroke-linecap="round"/>
+</svg>

@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: ebc-legal-rag
+    env: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "5174"
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: ebc-redis
+          property: connectionString
+
+  - type: redis
+    name: ebc-redis
+    plan: free
+    maxmemoryPolicy: allkeys-lru
