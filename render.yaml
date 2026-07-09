@@ -19,4 +19,4 @@ services:
     plan: free
     maxmemoryPolicy: allkeys-lru
     ipAllowList:
-      - 0.0.0.0/0
+      - source: 0.0.0.0/0
